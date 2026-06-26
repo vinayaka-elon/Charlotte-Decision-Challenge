@@ -139,7 +139,10 @@ const DEFAULT_STATE={
   similarity:{income:'',ownership:'',demolitions:''},
   adapt:{},
   argument:{claim:[],evidence:[],counter:[],who:[],transfers:[],caveat:[]},
-  argumentText:{claim:'',transfers:''}
+  argumentText:{claim:'',transfers:''},
+  team:null,
+  conclusion:'',
+  feedback:{}
 };
 let S;
 try{ S=Object.assign({},DEFAULT_STATE,JSON.parse(localStorage.getItem(SKEY)||'{}')); }
@@ -151,7 +154,7 @@ let _saveT;
 function save(){clearTimeout(_saveT);document.getElementById('saveState').textContent='saving…';
   _saveT=setTimeout(()=>{try{localStorage.setItem(SKEY,JSON.stringify(S));}catch(e){}
     document.getElementById('saveState').textContent='saved ✓';},250);}
-function resetAll(){if(confirm('Clear all your work (pins, notes, models, argument)? This cannot be undone.')){localStorage.removeItem(SKEY);location.reload();}}
+function resetAll(){if(confirm('Clear all your work and answers? This also signs your team out, and cannot be undone.')){localStorage.removeItem(SKEY);location.reload();}}
 
 /* ============================================================
  * Evidence tray
@@ -160,7 +163,7 @@ function clip(src,text){S.pins.push({id:'p'+Date.now()+Math.floor(Math.random()*
 function unpin(id){S.pins=S.pins.filter(p=>p.id!==id);
   // also remove from argument slots
   Object.keys(S.argument).forEach(k=>S.argument[k]=S.argument[k].filter(x=>x!==id));
-  renderPins();save();if(S.view==='argument')renderArgument();}
+  renderPins();save();}
 function renderPins(){
   document.getElementById('evCount').textContent=S.pins.length;
   document.getElementById('trayN').textContent=S.pins.length;
@@ -190,7 +193,8 @@ let _toastT;function toast(m){const t=document.getElementById('toast');t.textCon
  * ============================================================ */
 const NAV=[
   {grp:'Orient',items:[
-    {id:'brief',ic:'◎',t:'The brief'},
+    {id:'brief',ic:'◎',t:'Problem statement'},
+    {id:'missions',ic:'🎯',t:'Tasks'},
     {id:'guide',ic:'📖',t:'Field guide & data'},
   ]},
   {grp:'Investigate',items:[
@@ -201,13 +205,12 @@ const NAV=[
     {id:'dig',ic:'🔬',t:'Dig into one area'},
     {id:'table',ic:'▦',t:'Data table'},
   ]},
-  {grp:'Reason',items:[
-    {id:'missions',ic:'🎯',t:'Missions'},
-    {id:'survival1',ic:'',t:'Stage 1 · Build (Blue+Silver)'},
-    {id:'survival3',ic:'',t:'Stage 2 · Apply to Red Line'},
+  {grp:'The model',items:[
+    {id:'survival1',ic:'',t:'Stage 1 · Build the model'},
+    {id:'survival3',ic:'',t:'Stage 2 · Apply to the Red Line'},
   ]},
-  {grp:'Conclude',items:[
-    {id:'argument',ic:'⚖',t:'Put it all together'},
+  {grp:'Wrap up',items:[
+    {id:'feedback',ic:'★',t:'Feedback'},
   ]},
 ];
 const VIEWS={}; // id -> render fn (filled by modules)
@@ -237,8 +240,7 @@ function renderRail(){
   NAV.forEach(g=>{
     h+=`<div class="navgrp"><div class="lbl">${g.grp}</div>`;
     g.items.forEach(it=>{
-      const extra=it.id==='missions'&&missionsDone?`<span class="badge">${missionsDone}/${MISSIONS.length}</span>`:
-        (it.id==='argument'&&argScore().filled?`<span class="ck">${argScore().filled}/6</span>`:'');
+      const extra=it.id==='missions'&&missionsDone?`<span class="badge">${missionsDone}/${MISSIONS.length}</span>`:'';
       h+=`<div class="navitem ${S.view===it.id?'active':''}" onclick="go('${it.id}')"><span class="ic">${navIcon(it.id)||it.ic}</span>${it.t}${extra}</div>`;
     });
     h+='</div>';
@@ -262,7 +264,100 @@ function clipBtn(){return '';}
 
 /* DQ pill value + modal (defined in guide module too) */
 
-function boot(){ renderPins(); renderRail(); go(S.view||'brief'); }
+function boot(){ if(!gateOK()){renderGate();return;} hideGate(); renderTeamChip(); renderPins(); renderRail(); go(S.view||'brief'); }
+
+/* ---- Team login gate ---- */
+function validEmail(e){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e||'').trim());}
+function gateOK(){return !!(S.team&&S.team.name&&validEmail(S.team.email));}
+function hideGate(){var g=document.getElementById('gate');if(g){g.classList.add('hidden');g.innerHTML='';}}
+function renderTeamChip(){var c=document.getElementById('teamChip');if(!c)return;
+  if(gateOK()){c.style.display='';c.innerHTML='<b>'+esc(S.team.name)+'</b> <span class="mut" style="font-weight:400">'+esc(S.team.email)+'</span> <span style="cursor:pointer;margin-left:6px" title="Edit team" onclick="editTeam()">&#9998;</span>';}
+  else c.style.display='none';}
+function editTeam(){renderGate();}
+function gateMsg(m){var e=document.getElementById('gateErr');if(e)e.textContent=m;}
+function renderGate(){
+  var g=document.getElementById('gate');if(!g)return;
+  var t=(S.team&&S.team.name)||'',e=(S.team&&S.team.email)||'';
+  g.innerHTML='<div class="gatebox">'+
+    '<h2 style="margin:0 0 4px">Charlotte Decision Challenge</h2>'+
+    '<p class="small mut" style="margin:0 0 16px">Sign in with your team to begin. Your team name and email let us share your final results with you and the organizer.</p>'+
+    '<label class="gatelbl">Team name</label><input id="gateName" type="text" placeholder="e.g. The Transit Trackers" value="'+esc(t)+'">'+
+    '<label class="gatelbl">Team email</label><input id="gateEmail" type="email" placeholder="you@school.edu" value="'+esc(e)+'">'+
+    '<div id="gateErr" class="gateerr"></div>'+
+    '<button class="btn" id="gateGo" style="width:100%;margin-top:6px">Start the challenge &rarr;</button>'+
+    '<p class="tiny mut" style="margin-top:10px">By starting, you agree your team name, email and final answers may be shared with the challenge organizer (vgude@elon.edu).</p>'+
+  '</div>';
+  g.classList.remove('hidden');
+  function submit(){var n=document.getElementById('gateName').value.trim();var em=document.getElementById('gateEmail').value.trim();
+    if(!n){gateMsg('Please enter your team name.');return;}
+    if(!validEmail(em)){gateMsg('Please enter a valid email address.');return;}
+    S.team={name:n,email:em,ts:Date.now()};save();hideGate();renderTeamChip();renderPins();renderRail();go(S.view||'brief');}
+  document.getElementById('gateGo').onclick=submit;
+  document.getElementById('gateEmail').addEventListener('keydown',function(ev){if(ev.key==='Enter')submit();});
+  var nm=document.getElementById('gateName');if(nm)nm.focus();
+}
+
+/* ---- Download any chart as a PNG (white background) ---- */
+function downloadCanvas(id,filename){var c=document.getElementById(id);if(!c||!c.toDataURL){toast('Chart not ready yet');return;}
+  var t=document.createElement('canvas');t.width=c.width;t.height=c.height;var x=t.getContext('2d');
+  x.fillStyle='#ffffff';x.fillRect(0,0,t.width,t.height);x.drawImage(c,0,0);
+  var url;try{url=t.toDataURL('image/png');}catch(err){toast('Could not export chart');return;}
+  var a=document.createElement('a');a.href=url;a.download=filename||'chart.png';document.body.appendChild(a);a.click();a.remove();toast('Chart downloaded');}
+/* ---- Generic CSV download (any rendered table, or an array of rows) ---- */
+function downloadRows(rows,filename){var csv=rows.map(function(r){return r.map(function(c){c=(c==null?'':''+c);return (c.indexOf(',')>=0||c.indexOf('"')>=0||c.indexOf('\n')>=0)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',');}).join('\n');download(filename,csv);toast('Downloaded');}
+function downloadTableEl(id,filename){var el=document.getElementById(id);if(!el){toast('Nothing to download yet');return;}
+  var tbl=el.tagName==='TABLE'?el:el.querySelector('table');if(!tbl){toast('Nothing to download yet');return;}
+  var rows=[].slice.call(tbl.querySelectorAll('tr')).map(function(tr){return [].slice.call(tr.querySelectorAll('th,td')).map(function(c){return (c.innerText||c.textContent||'').replace(/\s+/g,' ').trim();});}).filter(function(r){return r.join('').length;});
+  if(!rows.length){toast('Nothing to download yet');return;}
+  downloadRows(rows,(filename||'table')+'.csv');}
+function dlT(id,fn){return '<button class="btn ghost sm" onclick="downloadTableEl(\''+id+'\',\''+fn+'\')">⬇ CSV</button>';}
+function downloadMapData(){try{var key=_mapState.key,mm=varMeasure(key);var rows=[['npa','town','red_line',catLabel(key)+(mm.unit&&mm.unit!=='—'?' ('+mm.unit+')':'')]];
+  D.npa.forEach(function(r){rows.push([npaVal(r,'npa'),npaVal(r,'town')||'',npaVal(r,'is_red')===1?'yes':'no',npaVal(r,key)]);});
+  downloadRows(rows,'neighborhoods_'+(''+key).replace(/[^a-z0-9]+/gi,'_')+'.csv');}catch(e){toast('Could not export');}}
+function downloadBeforeAfter(){try{var cat=null;TM_CAT.forEach(function(c){if(c.k===_tmCat)cat=c;});if(!cat)return;
+  var rows=[['variable (Blue corridor)','before','after','change','years']];
+  cat.items.filter(function(it){return _tmSel[it.k];}).forEach(function(it){var r=blueBA(it);if(r)rows.push([r.label,r.beforeT,r.afterT,r.delta,r.years]);});
+  downloadRows(rows,'blue_before_after.csv');}catch(e){toast('Could not export');}}
+function downloadDigBiz(){try{if(!window.BIZ||_dig.npa==null){toast('Pick a neighborhood first');return;}var ci=BIZc;
+  var rows=[['business_id','lat','lon','sector','status','employees','land_value','dist_to_nearest_station_mi']];
+  BIZ.rows.forEach(function(r){if(r[ci.npa]!==_dig.npa)return;var d=[r[ci.dred],r[ci.dblue],r[ci.dsilver]].filter(isNum);
+    rows.push([r[ci.li]!=null?('BZ'+r[ci.li]):'',r[ci.lat],r[ci.lon],SECTORS[r[ci.sector]]||r[ci.sector],r[ci.status]===1?'Active':'Closed',r[ci.emp],r[ci.land],d.length?Math.min.apply(null,d):'']);});
+  if(rows.length<2){toast('No businesses to export');return;}
+  downloadRows(rows,'neighborhood_'+_dig.npa+'_businesses.csv');}catch(e){toast('Could not export');}}
+/* ---- Map -> PNG: redraw the map's data on a clean white canvas (basemap tiles can't be captured) ---- */
+function _geomRings(g){if(!g)return [];return g.type==='Polygon'?g.coordinates:(g.type==='MultiPolygon'?[].concat.apply([],g.coordinates):(g.type==='LineString'?[g.coordinates]:(g.type==='MultiLineString'?g.coordinates:[])));}
+function renderMapPNG(opts){try{
+  var mnx=1e9,mxx=-1e9,mny=1e9,mxy=-1e9;function ext(lon,lat){if(lon<mnx)mnx=lon;if(lon>mxx)mxx=lon;if(lat<mny)mny=lat;if(lat>mxy)mxy=lat;}
+  (opts.polys||[]).forEach(function(p){p.rings.forEach(function(r){r.forEach(function(c){ext(c[0],c[1]);});});});
+  (opts.lines||[]).forEach(function(l){l.rings.forEach(function(r){r.forEach(function(c){ext(c[0],c[1]);});});});
+  (opts.points||[]).forEach(function(pt){ext(pt.lon,pt.lat);});
+  if(mnx>mxx){toast('Nothing on the map to export yet');return;}
+  var W=opts.width||1100,pad=opts.pad||26,dw=(mxx-mnx)||1e-4,dh=(mxy-mny)||1e-4,kx=Math.cos((mny+mxy)/2*Math.PI/180);
+  var sc=(W-2*pad)/(dw*kx);var H=Math.max(220,Math.round(dh*sc+2*pad));
+  function X(lon){return pad+(lon-mnx)*kx*sc;}function Y(lat){return pad+(mxy-lat)*sc;}
+  var cv=document.createElement('canvas');cv.width=W;cv.height=H;var ctx=cv.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,W,H);
+  (opts.polys||[]).forEach(function(p){p.rings.forEach(function(r){if(!r.length)return;ctx.beginPath();r.forEach(function(c,i){var x=X(c[0]),y=Y(c[1]);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.closePath();if(p.fill){ctx.fillStyle=p.fill;ctx.fill();}if(p.stroke){ctx.strokeStyle=p.stroke;ctx.lineWidth=p.w||0.7;ctx.stroke();}});});
+  (opts.lines||[]).forEach(function(l){l.rings.forEach(function(r){if(r.length<2)return;ctx.beginPath();r.forEach(function(c,i){var x=X(c[0]),y=Y(c[1]);if(i)ctx.lineTo(x,y);else ctx.moveTo(x,y);});ctx.strokeStyle=l.color||'#888';ctx.lineWidth=l.w||2;ctx.setLineDash(l.dash?[7,6]:[]);ctx.stroke();ctx.setLineDash([]);});});
+  (opts.points||[]).forEach(function(pt){ctx.globalAlpha=pt.alpha!=null?pt.alpha:0.85;ctx.beginPath();ctx.arc(X(pt.lon),Y(pt.lat),pt.r||2.5,0,6.2832);ctx.fillStyle=pt.color||'#1f6feb';ctx.fill();ctx.globalAlpha=1;});
+  if(opts.title){ctx.fillStyle='#16202c';ctx.font='600 16px Arial, sans-serif';ctx.fillText(opts.title,pad,20);}
+  var a=document.createElement('a');a.href=cv.toDataURL('image/png');a.download=(opts.filename||'map')+'.png';document.body.appendChild(a);a.click();a.remove();toast('Map downloaded');
+}catch(e){toast('Could not export map');}}
+function downloadMapImage(){try{var key=_mapState.key,vs=D.npa.map(function(r){return npaVal(r,key);}).filter(isNum),lo=quantile(vs,0.05),hi=quantile(vs,0.95);
+  var polys=((window.NPAS&&window.NPAS.features)||[]).map(function(f){var row=NPA_BY_ID[f.properties.id],v=row?npaVal(row,key):null,t=isNum(v)?(v-lo)/((hi-lo)||1):null;if(_mapState.rev&&t!=null)t=1-t;return {rings:_geomRings(f.geometry),fill:t==null?'#eef0f4':colorScale(Math.max(0,Math.min(1,t))),stroke:'#dfe3ea',w:0.5};});
+  var lines=(_mapState.lines&&window.LINESG)?window.LINESG.features.map(function(f){var ln=(f.properties.line||'').toLowerCase();return {rings:_geomRings(f.geometry),color:LINEHEX[ln]||'#444',w:2.5,dash:!!f.properties.dash};}):[];
+  var points=[];if(_mapState.stations)(window.RED_STATIONS||[]).forEach(function(s){points.push({lon:s.mlon||s.lon,lat:s.mlat||s.lat,color:'#b3203a',r:4});});
+  renderMapPNG({polys:polys,lines:lines,points:points,filename:'map_'+(''+key).replace(/[^a-z0-9]+/gi,'_'),title:prettyVar(catLabel(key))});}catch(e){toast('Could not export map');}}
+function downloadSurvMap(which){try{if(!window.RL2)return;var model=smModel(),R=window.RL2,rows=which==='red'?R.test:R.train,li=smIdx('lat'),lo=smIdx('lon'),sti=smIdx('status'),mode=_smMapMode||'pred';
+  var points=rows.map(function(r){var la=r[li],ln=r[lo];if(!la||!ln)return null;var p=model.prob(r);var col=(which!=='red'&&mode==='actual')?(r[sti]==='Active'?'#127a4b':'rgb(179,32,58)'):rateColor(p);return {lat:la,lon:ln,color:col,r:2.2,alpha:0.7};}).filter(Boolean);
+  var lines=window.LINESG?window.LINESG.features.map(function(f){var l=(f.properties.line||'').toLowerCase();return {rings:_geomRings(f.geometry),color:LINEHEX[l]||'#888',w:2,dash:!!f.properties.dash};}):[];
+  renderMapPNG({points:points,lines:lines,filename:which==='red'?'red_line_survival_map':'blue_silver_survival_map'});}catch(e){toast('Could not export map');}}
+function downloadExMap(){try{var e=exEnsure(),filtered=exFiltered(e._scored),li=smIdx('lat'),lo=smIdx('lon');
+  var points=filtered.map(function(o){var la=o.r[li],ln=o.r[lo];if(!la||!ln)return null;return {lat:la,lon:ln,color:rateColor(o.p),r:2.5,alpha:0.8};}).filter(Boolean);
+  var lines=window.LINESG?window.LINESG.features.map(function(f){var l=(f.properties.line||'').toLowerCase();return {rings:_geomRings(f.geometry),color:LINEHEX[l]||'#888',w:2,dash:!!f.properties.dash};}):[];
+  renderMapPNG({points:points,lines:lines,filename:'red_line_explorer_map'});}catch(e){toast('Could not export map');}}
+function downloadDigMap(){try{if(_dig.npa==null)return;var f=npaFeature(_dig.npa),polys=f?[{rings:_geomRings(f.geometry),fill:'rgba(31,111,235,0.08)',stroke:'#1f6feb',w:1.5}]:[],ci=BIZc,points=[];
+  BIZ.rows.forEach(function(r){if(r[ci.npa]!==_dig.npa)return;if(_dig.sector!=null&&r[ci.sector]!==_dig.sector)return;points.push({lat:r[ci.lat],lon:r[ci.lon],color:SECTOR_COLORS[r[ci.sector]]||'#888',r:2.6,alpha:0.85});});
+  renderMapPNG({polys:polys,points:points,filename:'neighborhood_'+_dig.npa+'_map'});}catch(e){toast('Could not export map');}}
 
 /* ============================================================
  * VIEW MODULES
@@ -272,8 +367,22 @@ VIEWS.brief=function(){
   const m=document.getElementById('main');
   m.innerHTML=`
   <div class="card">
-    <h2>Which businesses will be at risk?</h2>
-    <p class="lede">Charlotte is planning the LYNX <b style="color:var(--red)">Red Line</b> north through Huntersville, Cornelius, and Davidson. Using real data, find which local businesses and areas are most affected, tell risk apart from resilience, and recommend who the City should prioritize for outreach and support. No coding required.</p>
+    <div class="kick">Problem statement</div>
+    <h2>Which businesses will survive the Red Line?</h2>
+    <p class="lede">Charlotte is planning the LYNX <b style="color:var(--red)">Red Line</b>, a commuter-rail line running north through Huntersville, Cornelius, and Davidson. New transit reshapes the businesses around it: some shops gain customers, while others are priced out or torn down as land values climb. The City wants to know, <b>before the line is built</b>, which local businesses are most likely to stay open and which may close — so it can target outreach and support to the ones that need it most.</p>
+  </div>
+
+  <div class="card">
+    <div class="kick">Your challenge</div>
+    <h3 style="margin-top:2px">What we want you to do</h3>
+    <ol style="margin:6px 0 0;padding-left:20px;font-size:14px;color:var(--ink2);line-height:1.7">
+      <li><b>Explore the history.</b> Use the City of Charlotte's data to understand how the earlier transit lines (Blue and Silver) changed the businesses and neighborhoods around them.</li>
+      <li><b>Build a model.</b> On those already-built corridors, learn what separates a business that stays open from one that closes.</li>
+      <li><b>Predict the Red Line.</b> Apply your model to the planned Red Line and find which businesses may need the most support.</li>
+      <li><b>Make a recommendation.</b> Tell the City who to prioritize, and why.</li>
+    </ol>
+    <p class="small mut" style="margin-top:10px">No coding required. Every step is laid out as a checklist in the <b>Tasks</b> tab.</p>
+    <div class="okbox" style="margin-top:10px"><b>Your deliverable:</b> present your findings as a slide deck. Build it in <a href="https://docs.google.com/presentation/d/1T5wEt3Wh-vwK5j-QskoAHFabN6Kc-ZhFS4spuLkn7ro/copy" target="_blank" rel="noopener">this presentation template</a> — the link opens your own copy to edit as a team.</div>
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:16px">
@@ -288,9 +397,9 @@ VIEWS.brief=function(){
       <h3>Questions to carry with you</h3>
       <ul style="margin:0;padding-left:20px;font-size:14px;color:var(--ink2);line-height:1.6">
         <li>When the train arrives, what changes for nearby shops, and how fast?</li>
-        <li>What does an at-risk business look like in the data? What does a resilient one look like?</li>
-        <li>Which signals live at the neighborhood, parcel, and business scale?</li>
-        <li>Is a pattern the train, or the citywide boom that would have happened anyway?</li>
+        <li>What does a business that's likely to close look like in the data? What about one that's likely to stay open?</li>
+        <li>Which signals of survival or closure show up at the neighborhood, parcel, and business scale?</li>
+        <li>Which data patterns are caused by the train development, which by general city growth, and which by both?</li>
       </ul>
     </div>
     <div class="card">
@@ -302,24 +411,23 @@ VIEWS.brief=function(){
   </div>
 
   <div class="card">
-    <h3>How to spend the day</h3>
-    <p class="small mut">A suggested path. Every tool stays open in the sidebar whenever you want it.</p>
+    <div class="kick">Your task list</div>
+    <h3 style="margin-top:2px">Work through the Tasks tab</h3>
+    <p class="small mut">The <b>Tasks</b> tab is your step-by-step checklist — each task sends you to the right tool and asks what you found. The tools are grouped in the sidebar like this:</p>
     <div class="bars" style="margin-top:6px">
-      ${[['Orient — the brief, field guide and data dictionary','guide'],
-         ['Investigate — Map, Chart, Correlations, Time machine and Dig in','map'],
-         ['Stage 1 — build a survival model on the built Blue + Silver corridors','survival1'],
-         ['Stage 2 — apply and weight the model on the planned Red Line','survival2'],
-         ['Stage 3 — explore which businesses are most at risk, and why','survival3'],
-         ['Put it together — write up your analysis','argument']
+      ${[['Investigate — explore the City of Charlotte data (Map, Chart, Correlations, Time machine, Dig in)','map'],
+         ['Stage 1 — build the survival model on the Blue + Silver corridors','survival1'],
+         ['Stage 2 — apply the model to the planned Red Line and find who needs support','survival3']
        ].map(r=>`<div class="spread" style="padding:7px 0;border-bottom:1px solid var(--line2)">
          <div><b style="font-weight:600">${r[0]}</b></div>
          <button class="btn ghost sm" onclick="go('${r[1]}')">open</button></div>`).join('')}
     </div>
+    <button class="btn" style="margin-top:12px" onclick="go('missions')">Open the Tasks list →</button>
   </div>
 
   <div class="card tight">
     <div class="spread"><div class="small mut">Scope: Mecklenburg County. Learn on the Blue and Silver corridors, then apply to the Red Line.</div>
-    <button class="btn" onclick="go('guide')">Start with the field guide →</button></div>
+    <button class="btn" onclick="go('missions')">See your tasks →</button></div>
   </div>`;
   document.getElementById('hypo').oninput=function(){S.hypothesis=this.value;save();};
 };
@@ -329,17 +437,134 @@ function provTag(p){return p==='derived'?'<span class="tag derived">derived</spa
   p.indexOf('QoL')>=0?'<span class="tag npa">QoL survey</span>':
   p.indexOf('assessor')>=0?'<span class="tag biz">assessor</span>':
   '<span class="tag derived">'+esc(p)+'</span>';}
+// Plain-language statistic type + units for every variable (so a new student can read the dictionary and map legends).
+const _MEASURE_BY_KEY={
+  n_businesses:['Count','businesses in the neighborhood'],
+  median_emp:['Median','employees per business'],
+  pct_lease:['Percent','% of businesses that rent (not own) their space'],
+  pct_small_le9:['Percent','% of businesses with 9 or fewer employees'],
+  pct_near_red:['Percent','% of parcels within ½ mile of a planned Red Line station'],
+  pct_near_blue:['Percent','% of parcels within ½ mile of a Blue Line station'],
+  pct_parcel_underutilized:['Percent','% of parcels flagged underutilized'],
+  pct_parcel_out_of_state:['Percent','% of parcels with an out-of-state owner'],
+  land_value:['Dollar value','assessed land value, per parcel ($)'],
+  total_value:['Dollar value','assessed total value, per parcel ($)'],
+  net_building_value:['Dollar value','assessed building value, per parcel ($)'],
+  building_to_land:['Ratio','building value ÷ land value'],
+  parcel_building_to_land:['Ratio','building value ÷ land value'],
+  lot_acres:['Size','lot size (acres)'],
+  building_age:['Value','building age (years)'],
+  parcel_underutilized:['Flag (0/1)','1 = underutilized parcel'],
+  parcel_commercial:['Flag (0/1)','1 = commercial parcel'],
+  parcel_out_of_state_owner:['Flag (0/1)','1 = owner mails from outside NC'],
+  parcel_recent_sale:['Flag (0/1)','1 = parcel sold recently'],
+  sector:['Category','business sector (NAICS group)'],
+  leases_building:['Flag (0/1)','1 = business rents its building'],
+  employees:['Count','employees at the business'],
+  dist_station_mi:['Distance','miles to nearest transit station'],
+  nbhd_income:['Median','median household income ($)'],
+  nbhd_pct_own:['Percent','% of homes that are owner-occupied'],
+  nbhd_rent:['Median','median gross rent ($/month)'],
+  '311 REQUESTS':['Rate','311 service calls per 100 residents'],
+  'ADOPT A STREAM':['Rate','program participants per 1,000 residents'],
+  'ADOPT A STREET':['Rate','program participants per 1,000 residents'],
+  'CALLS FOR ANIMAL CARE':['Rate','calls per 1,000 residents'],
+  'CALLS FOR DISORDER':['Rate','calls per 1,000 residents'],
+  'COMMERCIAL BLDG AGE':['Median','age of commercial buildings (years)'],
+  'COMMERCIAL CONST':['Rate','new commercial construction (permitted sq ft per acre)'],
+  'EDU LEVEL BACH DEGREE':['Percent','% of adults with a bachelor’s degree'],
+  'EDU LEVEL HS DIPLOMA':['Percent','% of adults with at least a high-school diploma'],
+  'ENERGY CONS ELECTRICITY':['Average','electricity use per household (kWh)'],
+  'ENERGY CONS NATURAL GAS':['Average','natural-gas use per household (therms)'],
+  'FOOD AND NUTRITION SVCS':['Percent','% of residents receiving food/nutrition assistance'],
+  'HOUSING ASSIST DEVBASED':['Rate','subsidized housing units per 1,000 housing units'],
+  'HS GRADUATIONRATE':['Percent','% of students graduating high school on time'],
+  'MUNI BOARD PARTICPICIPATION':['Rate','city-board appointees per 1,000 residents'],
+  'NBRHOOD ORGANIZATIONS':['Rate','registered neighborhood organizations per 1,000 residents'],
+  'NBRHOOD SCHOOL ATTNDCE':['Percent','% of students attending their assigned neighborhood school'],
+  'PROX TO A GROCERY STORE':['Percent','% of households within walking distance of a grocery store'],
+  'PROX TO A PHARMACY':['Percent','% of households within walking distance of a pharmacy'],
+  'PROX TO EARLY CARE':['Percent','% of households within walking distance of early childcare'],
+  'PROX TO FINANCIAL SVCS':['Percent','% of households within walking distance of financial services'],
+  'PROX TO LOW COST HEALTH':['Percent','% of households within walking distance of low-cost health care'],
+  'PROX TO OUTDOOR REC':['Percent','% of households within walking distance of outdoor recreation'],
+  'PROX TO PUBLIC TRANSPORTATION':['Percent','% of households within walking distance of transit'],
+  'PROX TO SCHOOLAGE CARE':['Percent','% of households within walking distance of school-age care'],
+  'RACEETH ALL OTHER RACES':['Percent','% of residents of other races/ethnicities'],
+  'RACEETH ASIAN':['Percent','% of residents who are Asian'],
+  'RACEETH BLACK':['Percent','% of residents who are Black'],
+  'RACEETH HISPANIC':['Percent','% of residents who are Hispanic'],
+  'RACEETH WHITE':['Percent','% of residents who are White'],
+  'RESIDENTIAL NEW CONST':['Rate','new homes built (permits per 1,000 parcels)'],
+  'RESIDENTIAL WASTE':['Average','household waste collected (lbs per household)'],
+  'RESIDENTIAL WASTE DIV':['Percent','% of household waste recycled or diverted'],
+  'TEST PROF ELEMENTARY':['Percent','% of elementary students proficient on state tests'],
+  'TEST PROF HIGH':['Percent','% of high-school students proficient on state tests'],
+  'TEST PROF MIDDLE':['Percent','% of middle-school students proficient on state tests'],
+  'WATER CONS':['Average','water use per household (gallons)']
+};
+function _measureFromUnit(u){
+  var l=(u||'').toLowerCase();
+  if(l==='%')return['Percent','% (share)'];
+  if(l.indexOf('median')>=0)return['Median',u];
+  if(l.indexOf('avg')>=0||l.indexOf('average')>=0)return['Average',u];
+  if(l.indexOf('index')>=0)return['Index',u];
+  if(l.indexOf('acre')>=0)return['Density',u];
+  if(l.indexOf('/')>=0||l.indexOf(' per ')>=0)return['Rate',u];
+  if(l.indexOf('$')>=0)return['Dollar value',u];
+  if(l.indexOf('year')>=0)return['Median',u];
+  if(l.indexOf('sqft')>=0)return['Average',u];
+  return[u?'Measured value':'—',u||'—'];
+}
+function varMeasure(key){
+  var m=_MEASURE_BY_KEY[key];
+  if(m)return{stat:m[0],unit:m[1]};
+  var c=catByKey[key];var fu=_measureFromUnit(c&&c.unit);
+  return{stat:fu[0],unit:fu[1]};
+}
+const _ABBR=[[/\bRaceeth\b/gi,'Race/ethnicity:'],[/\bEdu\b/gi,'Education'],[/\bHs\b/gi,'High-school'],[/\bProx To\b/gi,'Proximity to'],[/\bSvcs\b/gi,'Services'],[/\bNbrhood\b/gi,'Neighborhood'],[/\bBldg\b/gi,'Building'],[/\bConst\b/gi,'Construction'],[/\bParticpicipation\b/gi,'Participation'],[/\bAttndce\b/gi,'Attendance'],[/\bDevbased\b/gi,'Development-based'],[/\bCons\b/gi,'Consumption'],[/\bDiv\b/gi,'Diversion'],[/\bGraduationrate\b/gi,'Graduation rate'],[/\bRec\b/gi,'Recreation']];
+function prettyVar(t){t=t||'';_ABBR.forEach(function(p){t=t.replace(p[0],p[1]);});return t;}
+function _statTagClass(s){return 'derived';}
+
+const KEY_VARS=[
+  ['dist_station_mi','How close the business sits to a transit station.'],
+  ['leases_building','Whether the business rents or owns its space — renters are more exposed.'],
+  ['employees','Business size, measured in employees.'],
+  ['sector','What kind of business it is (retail, food, finance, and so on).'],
+  ['building_to_land','Building value ÷ land value. A low ratio means the land is worth more than what sits on it — ripe for redevelopment.'],
+  ['parcel_underutilized','A flag for parcels that look under-built for where they sit.'],
+  ['nbhd_income','Median household income of the surrounding neighborhood.'],
+  ['nbhd_pct_own','Share of nearby homes that are owner-occupied.']
+];
 VIEWS.guide=function(){
   const m=document.getElementById('main');
   const cats=Array.from(new Set(D.catalog.map(c=>c.category))).sort();
+  const keyVarsHTML=KEY_VARS.map(function(kv){var c=catByKey[kv[0]];if(!c)return '';var mm=varMeasure(kv[0]);
+    return '<div style="display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--line2)"><span style="color:#e0a400;font-size:15px;line-height:1.4">★</span><div><div style="font-weight:600;font-size:13px">'+esc(prettyVar(c.title))+' <span class="mut" style="font-weight:400">· '+esc(mm.stat)+' · '+esc(mm.unit)+'</span></div><div class="small mut">'+kv[1]+'</div></div></div>';}).join('');
   m.innerHTML=`
   <div class="card">
     <div class="kick">Field guide</div>
-    <h2>Field guide</h2>
-    <p class="lede">Every variable, where it comes from, and what it can and cannot tell you. Knowing which numbers are real measurements and which are derived is half the skill.</p>
-    <div class="row">
-      <button class="btn ghost sm" onclick="document.getElementById('gloss').scrollIntoView({behavior:'smooth'})">Key concepts</button>
-      <button class="btn ghost sm" onclick="document.getElementById('breaks').scrollIntoView({behavior:'smooth'})">Measurement breaks ⚠</button>
+    <h2>Field guide &amp; data dictionary</h2>
+    <p class="lede">What you are predicting is <b>business survival</b> — whether a business stayed open or closed. Every variable below is a possible <b>input</b> or piece of context for that question. For each one the table tells you <b>what statistic it is</b> (a count, a percentage, a median, a rate, and so on) and <b>its units</b>, so you always know what a number means before you use it.</p>
+    <div class="warnbox" style="background:#eef5ff;border-color:#cfe0ff;color:#1b3a6b;margin-top:10px"><b>Facilitator tip (10 min):</b> before anyone builds a model, have each team skim this dictionary and pick three variables they think will predict survival. It is a fast data-check that surfaces misunderstandings early.</div>
+    <div class="row" style="margin-top:8px">
+      <button class="btn ghost sm" onclick="document.getElementById('keyvars').scrollIntoView({behavior:'smooth'})">★ Key variables</button>
+      <button class="btn ghost sm" onclick="document.getElementById('breaks').scrollIntoView({behavior:'smooth'})">Things that will fool you ⚠</button>
+    </div>
+  </div>
+
+  <div class="card" id="keyvars">
+    <div class="kick">Start here</div>
+    <h3 style="margin-top:2px">Key variables to explore</h3>
+    <p class="small mut">If you only look at a few columns, look at these — they tend to matter most for whether a business survives.</p>
+    ${keyVarsHTML}
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom:6px">How to read the numbers</h3>
+    <div class="small mut" style="line-height:1.6">
+      <b>Indexes are scores, not counts.</b> The City <b>displacement index</b> runs <b>0 to 5</b> (higher = more displacement pressure). A few Quality-of-Life measures run <b>1 to 3</b> (1 = low, 2 = medium, 3 = high). An index of 0 or 1 is the low end of the scale, not a missing value.<br>
+      <b>Common abbreviations:</b> NPA = Neighborhood Profile Area · CBP = Census County Business Patterns (the business-count source) · QoL = Quality of Life survey · building-to-land = building value ÷ land value.
     </div>
   </div>
 
@@ -355,30 +580,16 @@ VIEWS.guide=function(){
       <span class="chip" data-c="Business">Business</span>
       ${cats.map(c=>`<span class="chip" data-c="cat:${esc(c)}">${esc(c)}</span>`).join('')}
     </div>
+    <div class="row" style="justify-content:flex-end;margin-bottom:6px">${dlT('dictTable','data_dictionary')}</div>
     <div class="scrollx"><table class="t" id="dictTable"></table></div>
     <div class="small mut" id="dictCount" style="margin-top:6px"></div>
-  </div>
-
-  <div class="card" id="gloss">
-    <h3>Key concepts</h3>
-    <div class="grid2">
-      <div>
-        ${gloss('Displacement index','A constructed City vulnerability score, 0 to 5, defined at the <b>neighborhood</b> level. Every business in a neighborhood shares it. It is the target you will model, but it is a label the City built, not an observed eviction or relocation.')}
-        ${gloss('il_ratio / building-to-land','Building value ÷ land value. Low ratio = the land is worth far more than what sits on it → ripe for redevelopment. Undefined when land value = 0.')}
-        ${gloss('Underutilized','A derived flag: il_ratio &lt; 1.5, or building value &lt; $5,000 (vacant). A redevelopment signal, but also one of the things the index is built from.')}
-      </div>
-      <div>
-        ${gloss('Out-of-state owner','Owner\'s mailing address is outside NC. A proxy for absentee or investor ownership. It is also one of the ingredients the City used to build its displacement index.')}
-        ${gloss('Circular evidence','Using a variable to predict an outcome that was partly <b>built from</b> that same variable. It makes the fit look better than it is. The displacement index was built from several variables in this dataset, so part of your job is noticing which ones.')}
-        ${gloss('Out-of-sample','Testing a rule on data it never saw while being built. Here: learn on Blue+Silver, test on the Red Line. In-sample accuracy always flatters; out-of-sample is the honest number.')}
-      </div>
-    </div>
   </div>
 
   <div class="card" id="breaks">
     <h3>⚠ Things that will fool you</h3>
     <div class="warnbox"><b>Measurement breaks.</b> Business counts come from the Census CBP, whose methodology shifts around <b>2012</b>; building-permit coverage firms up around <b>2016</b>. A jump across those years can be a <i>recording</i> change, not a real-world change. The Time machine shades these years.</div>
-    <div class="warnbox"><b>The target is sparse.</b> The neighborhood displacement index is populated for only <b>${DQ.dispN} of ${DQ.nNpa}</b> neighborhoods. Businesses inherit it, so the table looks more complete than it is.</div>
+    <div class="warnbox"><b>The City displacement index is an input, not the answer.</b> It is a vulnerability score the City built (0 to 5, at the neighborhood level), and it is populated for only <b>${DQ.dispN} of ${DQ.nNpa}</b> neighborhoods. You can feed it to the model as one signal, but the thing you are actually predicting is whether each business survived.</div>
+    <div class="warnbox"><b>Watch for circular inputs.</b> The City built its displacement index partly from variables that are also in this table (underutilized parcels, out-of-state owners). Using both the index and its ingredients can make a model look stronger than it really is.</div>
     <div class="warnbox"><b>The station list is dirty.</b> The raw transit-stop list has <b>${DQ.stationsRaw}</b> entries but only <b>${DQ.stationsUniq}</b> unique locations. This tool de-duplicates before measuring distances.</div>
     <div class="warnbox"><b>Imputation.</b> Neighborhood income and rent are missing for about 85% of businesses; models fill gaps with the column average, so lean on them lightly.</div>
   </div>`;
@@ -392,10 +603,12 @@ VIEWS.guide=function(){
       if(dq){const s=(c.title+' '+c.key+' '+c.category).toLowerCase();if(s.indexOf(dq)<0)return false;}
       return true;});
     document.getElementById('dictTable').innerHTML=
-      '<thead><tr><th>Variable</th><th>Level</th><th>Category</th><th>Unit</th><th>Source</th></tr></thead><tbody>'+
-      rows.map(c=>`<tr><td><b style="font-weight:600">${esc(c.title)}</b><div class="tiny mut">${esc(c.key)}</div></td>`+
+      '<thead><tr><th>Variable</th><th>Measure</th><th>What one number means &amp; its units</th><th>Level</th><th>Source</th></tr></thead><tbody>'+
+      rows.map(c=>{const mm=varMeasure(c.key);return `<tr><td><b style="font-weight:600">${esc(prettyVar(c.title))}</b><div class="tiny mut">${esc(c.key)}</div></td>`+
+        `<td><span class="tag ${_statTagClass(mm.stat)}">${esc(mm.stat)}</span></td>`+
+        `<td>${esc(mm.unit)}</td>`+
         `<td><span class="tag ${c.level==='Neighborhood'?'npa':c.level==='Business'?'biz':'derived'}">${esc(c.level)}</span></td>`+
-        `<td>${esc(c.category)}</td><td>${esc(c.unit||'—')}</td><td>${provTag(c.prov)}</td></tr>`).join('')+'</tbody>';
+        `<td>${provTag(c.prov)}</td></tr>`;}).join('')+'</tbody>';
     document.getElementById('dictCount').textContent=rows.length+' variables shown';
   }
   document.getElementById('dictSearch').oninput=function(){dq=this.value.toLowerCase();drawDict();};
@@ -412,8 +625,8 @@ function openDQ(){
   openModal('Data-quality readout',
     `<p class="small mut">Share of the ${ALLBIZ.length.toLocaleString()} businesses that carry a real measured value for each modelling feature. Below ~60% (red), a model is mostly working off the column average.</p>
      <div class="bars">${rows}</div>
-     <div class="note" style="margin-top:12px"><b>Overall measured:</b> ${DQ.overall}% across these features. <b>Target coverage:</b> the neighborhood displacement index exists for ${DQ.dispN}/${DQ.nNpa} neighborhoods. <b>Stations:</b> ${DQ.stationsRaw} raw → ${DQ.stationsUniq} unique (de-duplicated here).</div>
-     <p class="small mut" style="margin-top:10px">Honesty layer: imputed values are filled with the column mean and counted, never hidden. The Model lab shows the imputation % for every feature you pick.</p>`);
+     <div class="note" style="margin-top:12px"><b>Overall measured:</b> ${DQ.overall}% across these features. <b>City index coverage:</b> the neighborhood displacement index (an optional input) exists for ${DQ.dispN}/${DQ.nNpa} neighborhoods. <b>Stations:</b> ${DQ.stationsRaw} raw → ${DQ.stationsUniq} unique (de-duplicated here).</div>
+     <p class="small mut" style="margin-top:10px">Honesty layer: imputed values are filled with the column mean and counted, never hidden. Stage 1 shows the imputation % for every feature you pick.</p>`);
 }
 /* ---------------- MAP STUDIO ---------------- */
 const NPA_BY_ID={}; D.npa.forEach(r=>NPA_BY_ID[npaVal(r,'npa')]=r);
@@ -430,6 +643,16 @@ function npaVarSelect(id,sel,coveredOnly){
   return `<select id="${id}">`+Object.keys(g).sort().map(cat=>
     `<optgroup label="${esc(cat)}">`+g[cat].map(c=>`<option value="${c.key}" ${c.key===sel?'selected':''}>${esc(c.title)}</option>`).join('')+`</optgroup>`).join('')+`</select>`;
 }
+// Place the 3 planned Red Line station markers ON the dashed line (their town-centre coords sit ~1.5km off the rail alignment).
+function _snapRedStations(){try{
+  if(!window.RED_STATIONS||!window.LINESG)return;
+  var red=null;window.LINESG.features.forEach(function(f){if(f.properties&&f.properties.line==='red')red=f;});if(!red)return;
+  var pts=[];(function flat(a){if(typeof a[0]==='number')pts.push(a);else a.forEach(flat);})(red.geometry.coordinates);
+  window.RED_STATIONS.forEach(function(s){var kx=Math.cos(s.lat*Math.PI/180),best=1e18,bp=null;
+    pts.forEach(function(p){var dx=(p[0]-s.lon)*kx,dy=(p[1]-s.lat),d=dx*dx+dy*dy;if(d<best){best=d;bp=p;}});
+    if(bp){s.mlat=bp[1];s.mlon=bp[0];}});
+}catch(e){}}
+_snapRedStations();
 let _mapState={key:'HOUSEHOLD INCOME',rev:false,lines:true,stations:true,zoomLine:'',zoomNpa:''};
 function npaLineToken(id){const f=window.NPAS.features.find(x=>x.properties.id==id);return f?(f.properties.lns||''):'';}
 function npaLineLabel(id){const t=npaLineToken(id).split(';')[0];return t?t.charAt(0).toUpperCase()+t.slice(1):'Off-corridor';}
@@ -446,6 +669,8 @@ VIEWS.map=function(){
       <label class="chip ${_mapState.stations?'on':''}" id="mapStations">Stations</label>
       <label class="chip ${_mapState.rev?'on':''}" id="mapRev">Reverse scale</label>
       <span id="mapClip"></span>
+      <button class="btn ghost sm" onclick="downloadMapImage()">⬇ Map (PNG)</button>
+      <button class="btn ghost sm" onclick="downloadMapData()">⬇ Map data (CSV)</button>
     </div>
     <div class="row" style="margin:2px 0 2px;padding:8px 10px;background:var(--panel2);border:1px solid var(--line);border-radius:9px">
       <label class="fld">Zoom to · line <select id="mapZL"><option value="">all corridors</option><option value="blue">Blue</option><option value="silver">Silver</option><option value="gold">Gold</option><option value="red">Red</option></select></label>
@@ -457,8 +682,8 @@ VIEWS.map=function(){
     <div class="small mut" id="mapDesc" style="margin-top:6px"></div>
   </div>
   <div class="grid2">
-    <div class="card"><h3 style="margin-bottom:8px">Highest 12</h3><div class="scrollx" style="max-height:340px"><table class="t" id="mapTop"></table></div></div>
-    <div class="card"><h3 style="margin-bottom:8px">Lowest 12</h3><div class="scrollx" style="max-height:340px"><table class="t" id="mapBot"></table></div></div>
+    <div class="card"><div class="spread" style="margin-bottom:8px"><h3 style="margin:0">Highest 12</h3>${dlT('mapTop','highest_neighborhoods')}</div><div class="scrollx" style="max-height:340px"><table class="t" id="mapTop"></table></div></div>
+    <div class="card"><div class="spread" style="margin-bottom:8px"><h3 style="margin:0">Lowest 12</h3>${dlT('mapBot','lowest_neighborhoods')}</div><div class="scrollx" style="max-height:340px"><table class="t" id="mapBot"></table></div></div>
   </div>`;
   document.getElementById('mapClip').innerHTML=clipBtn('Map studio',()=>mapClipText(),'Clip this map');
   const map=L.map('mapHost',{scrollWheelZoom:true,zoomControl:true}).setView([35.32,-80.82],10);
@@ -483,12 +708,14 @@ VIEWS.map=function(){
         layer.on('mouseover',()=>layer.setStyle({weight:2.4,color:'#1f6feb'}));
         layer.on('mouseout',()=>geoLayer.resetStyle(layer));
       }}).addTo(map);
-    const c=catByKey[key];
+    const mm=varMeasure(key);
     document.getElementById('mapLegend').innerHTML=
-      `<b style="color:var(--ink)">${esc(catLabel(key))}</b>`+
-      `<span style="margin-left:10px">${fmt(_mapState.rev?hi:lo)}</span><div class="grad" style="${_mapState.rev?'transform:scaleX(-1)':''}"></div><span>${fmt(_mapState.rev?lo:hi)}</span>`+
-      `<span class="mut">· ${c?c.unit||'':''} · ${vs.length}/${D.npa.length} measured</span>`;
-    document.getElementById('mapDesc').innerHTML=`Median across neighborhoods: <b>${fmt(median(vs))}</b>. Red Line neighborhoods: `+
+      `<b style="color:var(--ink)">${esc(prettyVar(catLabel(key)))}</b>`+
+      `<span class="tag derived" style="margin-left:8px">${esc(mm.stat)}</span>`+
+      `<span class="mut" style="margin-left:6px">${esc(mm.unit)}</span>`+
+      `<span style="margin-left:14px">${fmt(_mapState.rev?hi:lo)}</span><div class="grad" style="${_mapState.rev?'transform:scaleX(-1)':''}"></div><span>${fmt(_mapState.rev?lo:hi)}</span>`+
+      `<span class="mut">· ${vs.length}/${D.npa.length} neighborhoods measured</span>`;
+    document.getElementById('mapDesc').innerHTML=`Typical neighborhood (median): <b>${fmt(median(vs))}</b> ${esc(mm.unit)}. Red Line neighborhoods: `+
       D.npa.filter(r=>npaVal(r,'is_red')===1).map(r=>`${esc(npaVal(r,'town')||'NPA '+npaVal(r,'npa'))} ${fmt(npaVal(r,key))}`).join(' · ');
     rankTables(key);
   }
@@ -511,7 +738,7 @@ VIEWS.map=function(){
     if(_mapState.stations){stLayer=L.layerGroup();
       ST_UNIQ.forEach(s=>{const col=LINEHEX[(s[3]||'').toLowerCase()]||'#333';
         L.circleMarker([s[1],s[0]],{pane:'stpane',radius:4,color:'#fff',weight:1,fillColor:col,fillOpacity:1}).bindTooltip(s[2]||'').addTo(stLayer);});
-      (window.RED_STATIONS||[]).forEach(s=>L.circleMarker([s.lat,s.lon],{pane:'stpane',radius:6,color:'#111',weight:1.5,fillColor:'#b3203a',fillOpacity:1}).bindTooltip('Red · '+s.name).addTo(stLayer));
+      (window.RED_STATIONS||[]).forEach(s=>L.circleMarker([s.mlat||s.lat,s.mlon||s.lon],{pane:'stpane',radius:6,color:'#111',weight:1.5,fillColor:'#b3203a',fillOpacity:1}).bindTooltip('Planned Red Line station: '+s.name).addTo(stLayer));
       stLayer.addTo(map);}
   }
   function fillNpaPicker(){
@@ -535,7 +762,7 @@ VIEWS.map=function(){
 function npaPopup(row,key){
   const f=k=>fmt(npaVal(row,k));
   return `<b>${esc(npaVal(row,'town')||'NPA '+npaVal(row,'npa'))}</b> · NPA ${npaVal(row,'npa')}${npaVal(row,'is_red')===1?' <span style="color:#b3203a">(Red Line)</span>':''}<br>`+
-    `<b>${esc(catLabel(key))}: ${f(key)}</b><hr style="margin:5px 0;border:none;border-top:1px solid #eee">`+
+    `<div style="margin:6px 0;padding:7px 9px;background:#eef5ff;border:1px solid #cfe0ff;border-radius:7px"><div style="font-size:12px;color:#1b3a6b;font-weight:700">${esc(prettyVar(catLabel(key)))}</div><div style="font-size:18px;font-weight:800;color:#16202c;line-height:1.15">${f(key)} <span style="font-size:11px;font-weight:600;color:#5b6675">${esc(varMeasure(key).unit)}</span></div><div style="font-size:10px;color:#7a8694">${esc(varMeasure(key).stat)}</div></div>`+
     `Income ${fmt$(npaVal(row,'HOUSEHOLD INCOME'))} · Own ${f('HOME OWNERSHIP')}% · Rent ${fmt$(npaVal(row,'RENTAL COSTS'))}<br>`+
     `Res. demolitions ${f('RESIDENTIAL DEMOLITIONS')} · Businesses ${f('n_businesses')} · % small ${f('pct_small_le9')}%`;
 }
@@ -563,10 +790,11 @@ VIEWS.chart=function(){
     <div class="row" style="margin:6px 0">
       <label class="fld">X axis <span id="cxWrap"></span></label>
       <label class="fld">Y axis <span id="cyWrap"></span></label>
-      <label class="fld">Color by <select id="cgrp"></select></label>
-      <label class="fld">Chart <select id="ckind"><option value="scatter">scatter + fit line</option><option value="box">box plot (Y by group)</option></select></label>
+      <label class="fld">Group / colour by <select id="cgrp"></select></label>
+      <label class="fld">Chart <select id="ckind"><option value="scatter">scatter + fit line</option><option value="box">box plot (Y by transit line)</option></select></label>
       <span id="chartClip" style="align-self:flex-end"></span>
     </div>
+    <div class="row" style="justify-content:flex-end;margin:4px 0 0"><button class="btn ghost sm" onclick="downloadCanvas('csCanvas','chart-studio.png')">⬇ Download PNG</button></div>
     <div class="chartwrap"><canvas id="csCanvas"></canvas></div>
     <div class="note" id="csNote"></div>
   </div>
@@ -588,7 +816,7 @@ VIEWS.chart=function(){
     _cs.group='none';VIEWS.chart();});
   ['cx','cy'].forEach(id=>document.getElementById(id).onchange=function(){_cs[id[1]]=this.value;drawCS();});
   document.getElementById('cgrp').onchange=function(){_cs.group=this.value;drawCS();};
-  document.getElementById('ckind').onchange=function(){_cs.kind=this.value;drawCS();};
+  document.getElementById('ckind').onchange=function(){_cs.kind=this.value;if(_cs.kind==='box'&&_cs.group==='none'){_cs.group='line';VIEWS.chart();return;}drawCS();};
   drawCS();
 };
 function csData(){
@@ -651,7 +879,7 @@ VIEWS.pop=function(){
   <div class="card">
     <div class="kick" style="color:var(--blue)">Investigate · population builder</div>
     <h2>Build a population</h2>
-    <p class="small mut">Stack filters to define a group of businesses. Counts, sector mix, and average risk update live. Export the set.</p>
+    <p class="small mut">Stack filters to define a group of businesses. Counts, sector mix, and average survival chance update live. Export the set.</p>
     <div class="row" style="margin-bottom:8px">
       <label class="fld">Line <select id="pfLine"><option value="">all lines</option><option value="Blue">Blue</option><option value="Silver">Silver</option><option value="Red">Red</option></select></label>
       <label class="fld">Within ___ mi of a station <input type="number" id="pfDist" step="0.25" min="0" value="${_pf.distMax}" style="width:90px"></label>
@@ -757,8 +985,11 @@ let _tmSector='retail';
 const TM_AREA_COLORS=['#1f6feb','#b3203a','#b08a2e','#127a4b','#6b4ea0','#0e8a8a','#c2570c','#6b7280','#d11d6b'];
 if(window.Chart&&Chart.defaults){Chart.defaults.font.family="'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif";Chart.defaults.font.size=12;Chart.defaults.color='#5b6675';}
 const ANNFONT="600 11px "+"'Inter',-apple-system,'Segoe UI',Roboto,Arial,sans-serif";
-const railPlugin={id:'rail',afterDraw(chart){const sc=chart.scales.x;if(!sc)return;const ctx=chart.ctx;[['2007','Blue Line opens'],['2018','Blue extension']].forEach(function(p){const i=chart.data.labels.indexOf(p[0]);if(i<0)return;const x=sc.getPixelForValue(p[0]);ctx.save();ctx.strokeStyle='rgba(18,122,75,.55)';ctx.setLineDash([5,3]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x,chart.chartArea.top);ctx.lineTo(x,chart.chartArea.bottom);ctx.stroke();ctx.fillStyle='rgba(18,122,75,.95)';ctx.font=ANNFONT;ctx.fillText(p[1],x+3,chart.chartArea.bottom-5);ctx.restore();});}};
-const breakPlugin={id:'breaks',afterDraw(chart){const sc=chart.scales.x;if(!sc)return;const ctx=chart.ctx;[['2012','CBP method shift'],['2016','permit coverage']].forEach(([yr,lab])=>{const i=chart.data.labels.indexOf(yr);if(i<0)return;const x=sc.getPixelForValue(yr);ctx.save();ctx.strokeStyle='rgba(154,91,0,.5)';ctx.setLineDash([4,4]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x,chart.chartArea.top);ctx.lineTo(x,chart.chartArea.bottom);ctx.stroke();ctx.fillStyle='rgba(154,91,0,.8)';ctx.font=ANNFONT;ctx.fillText('⚠ '+yr,x+3,chart.chartArea.top+11);ctx.restore();});}};
+// Find the x-pixel for an event year on any time-series, even when that exact year is not a tick (interpolates between the two surrounding years; returns null if outside the chart's range).
+function _tsEventX(chart,year){var sc=chart.scales.x;if(!sc)return null;var labels=chart.data.labels||[];if(!labels.length)return null;var nums=labels.map(function(l){return parseFloat(String(l).slice(0,4));});for(var i=0;i<labels.length;i++){if(nums[i]===year)return sc.getPixelForValue(labels[i]);}var lo=-1,hi=-1;for(var j=0;j<nums.length;j++){if(isNaN(nums[j]))continue;if(nums[j]<year&&(lo<0||nums[j]>nums[lo]))lo=j;if(nums[j]>year&&(hi<0||nums[j]<nums[hi]))hi=j;}if(lo<0||hi<0)return null;var xlo=sc.getPixelForValue(labels[lo]),xhi=sc.getPixelForValue(labels[hi]);return xlo+(xhi-xlo)*((year-nums[lo])/(nums[hi]-nums[lo]));}
+function _tsLabelBox(ctx,text,x,y,color){ctx.font=ANNFONT;var w=ctx.measureText(text).width;ctx.fillStyle='rgba(255,255,255,.86)';ctx.fillRect(x-2,y-9,w+4,12);ctx.fillStyle=color;ctx.fillText(text,x,y);}
+// One marker plugin for every time-series chart. Reads chart.options.plugins.tsmarkers.events = [{year,label,kind:'rail'|'break'}].
+const tsMarkerPlugin={id:'tsmarkers',afterDatasetsDraw(chart){var cfg=(chart.options.plugins&&chart.options.plugins.tsmarkers)||{};var evs=cfg.events||[];if(!evs.length)return;var ctx=chart.ctx,ca=chart.chartArea;evs.forEach(function(e){var x=_tsEventX(chart,e.year);if(x==null||x<ca.left-1||x>ca.right+1)return;var brk=e.kind==='break';var lcol=brk?'rgba(154,91,0,.5)':'rgba(18,122,75,.5)';var tcol=brk?'rgba(154,91,0,.95)':'rgba(18,122,75,.95)';ctx.save();ctx.strokeStyle=lcol;ctx.setLineDash(brk?[4,4]:[5,3]);ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x,ca.top);ctx.lineTo(x,ca.bottom);ctx.stroke();ctx.setLineDash([]);var ly=brk?ca.top+11:ca.bottom-6;_tsLabelBox(ctx,e.label,x+4,ly,tcol);ctx.restore();});}};
 function _has(x){return x&&typeof x==='object';}
 function _cap(s){return s.charAt(0).toUpperCase()+s.slice(1);}
 function _secName(s){return {retail:'retail',realestate:'real estate',finance:'finance',food:'food and hotels'}[s]||s;}
@@ -822,19 +1053,24 @@ VIEWS.time=function(){
   <div class="card">
     <div class="kick" style="color:var(--blue)">Investigate · time machine</div>
     <h2>Change over time</h2>
-    <p class="small mut">Track how the corridor shifted year by year and compare it against citywide trends. A year marked <span style="color:var(--warn)">⚠</span> can be a recording change, not a real one. <span style="font-variant:all-small-caps">build tm-2026-06-16</span> · ${stamp}.</p>
+    <p class="small mut">Track how the Blue and Silver corridors changed over time — the lesson you carry to the Red Line. Pick a variable, then optionally <b>overlay a second one on the right axis</b> to compare two trends at different scales. A year marked <span style="color:var(--warn)">⚠</span> can be a recording change, not a real one. <span style="font-variant:all-small-caps">build tm-2026-06-16</span> · ${stamp}.</p>
+    <div class="small mut" style="margin-bottom:4px">Variable (left axis):</div>
     <div class="chips">${TM_ORDER.map(id=>`<span class="chip ${_tm===id?'on':''}" data-tm="${id}">${TM_SERIES[id].label}</span>`).join('')}</div>
     <div id="tmLineChips" class="chips" style="margin-top:0"></div>
     <div id="tmOverlay" class="chips" style="margin-top:0"></div>
+    <div class="row" style="justify-content:flex-end;margin:4px 0 0"><button class="btn ghost sm" onclick="downloadCanvas('tmCanvas','time-machine.png')">⬇ Download PNG</button></div>
     <div class="chartwrap" style="height:360px"><canvas id="tmCanvas"></canvas></div>
     <div class="note" id="tmNote"></div>
-    <div id="tmTable" style="margin-top:14px;overflow:auto"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:14px">${dlT('tmTable','time_series_table')}</div>
+    <div id="tmTable" style="margin-top:4px;overflow:auto"></div>
+    <div id="tmScore" style="margin-top:16px"></div>
     <div style="margin-top:10px" id="tmClip"></div>
   </div>`;
   document.querySelectorAll('[data-tm]').forEach(ch=>ch.onclick=function(){_tm=this.dataset.tm;document.querySelectorAll('[data-tm]').forEach(x=>x.classList.remove('on'));this.classList.add('on');renderTmLineChips();renderTmOverlay();drawTM();});
   renderTmLineChips();renderTmOverlay();
   document.getElementById('tmClip').innerHTML=clipBtn('Time machine',()=>tmClipText(),'Clip this trend');
   drawTM();
+  drawTmScore();
 };
 function renderTmLineChips(){
   const host=document.getElementById('tmLineChips');if(!host)return;
@@ -856,7 +1092,7 @@ function _tmTableHTML(t){
 }
 function renderTmOverlay(){
   const host=document.getElementById('tmOverlay');if(!host)return;
-  const opts=['homeval','rent','rezone','teardown'].filter(id=>id!==_tm);
+  const opts=['homeval','rent','rezone','corridor','teardown'].filter(id=>id!==_tm);
   host.innerHTML='<span class="small mut" style="align-self:center;margin-right:4px">overlay (right axis):</span>'+
     '<span class="chip '+(!_tmOverlay?'on':'')+'" data-ov="">none</span>'+
     opts.map(id=>'<span class="chip '+(_tmOverlay===id?'on':'')+'" data-ov="'+id+'">'+TM_SERIES[id].label+'</span>').join('');
@@ -881,18 +1117,72 @@ function drawTM(){
       labels=union;
       datasets=b.ds.map(d=>Object.assign({},d,{yAxisID:'y',spanGaps:true,data:remap(b.labels,d.data)}));
       const od=ob.ds[0];
-      datasets.push(Object.assign({},od,{label:TM_SERIES[_tmOverlay].label+' (right)',yAxisID:'y2',spanGaps:true,borderDash:[5,4],fill:false,backgroundColor:'transparent',borderColor:'#6b4ea0',data:remap(ob.labels,od.data)}));
-      y2={position:'right',beginAtZero:false,grid:{drawOnChartArea:false},ticks:ob.fmt?{callback:ob.fmt}:{}};
-      if(noteEl)noteEl.innerHTML=b.note+' <span class="mut">Overlay: '+TM_SERIES[_tmOverlay].label+' on the right axis (dashed purple).</span>';
+      datasets.push(Object.assign({},od,{label:TM_SERIES[_tmOverlay].label+' (right axis →)',yAxisID:'y2',spanGaps:true,borderDash:[5,4],fill:false,backgroundColor:'transparent',borderColor:'#6b4ea0',data:remap(ob.labels,od.data)}));
+      y2={position:'right',beginAtZero:false,grid:{drawOnChartArea:false},ticks:ob.fmt?{callback:ob.fmt,color:'#6b4ea0'}:{color:'#6b4ea0'},title:{display:true,text:'right axis → '+TM_SERIES[_tmOverlay].label,color:'#6b4ea0',font:{weight:'600'}}};
+      if(noteEl)noteEl.innerHTML=b.note+' <span class="mut"><b style="color:#6b4ea0">Dashed purple line = '+TM_SERIES[_tmOverlay].label+', read on the right-hand axis.</b></span>';
     }
   }
   try{
     const ctx=canvas.getContext('2d');
     const scales={x:{grid:{display:false}},y:{beginAtZero:false,grid:{color:'#eef2f7'},ticks:b.fmt?{callback:b.fmt}:{}}};
     if(y2)scales.y2=y2;
-    _tmChart=new Chart(ctx,{type:'line',data:{labels,datasets},plugins:[breakPlugin,railPlugin],
-      options:{animation:false,maintainAspectRatio:false,plugins:{legend:{position:'top'}},scales}});
+    // Reference overlays on every time series: green = transit milestones, yellow = years to read with caution (see Field guide).
+    const _tsEv=[{year:2007,label:'Blue Line opens',kind:'rail'},{year:2018,label:'Blue extension',kind:'rail'},{year:2012,label:'⚠ 2012',kind:'break'},{year:2016,label:'⚠ 2016',kind:'break'}];
+    _tmChart=new Chart(ctx,{type:'line',data:{labels,datasets},plugins:[tsMarkerPlugin],
+      options:{animation:false,maintainAspectRatio:false,plugins:{legend:{position:'top'},tsmarkers:{events:_tsEv}},scales}});
   }catch(e){if(noteEl)noteEl.innerHTML=`<span style="color:var(--warn)">Chart could not render (${e.message}). The data table below still shows every value.</span>`;}
+}
+/* ---- Time machine: before -> after scorecard (pick variables) ---- */
+const TM_CAT=[
+  {k:'sectors',label:'Business sectors',common:true,mode:'pts',items:[
+    {sk:'retail',label:'Retail'},
+    {sk:'realestate',label:'Real estate'},
+    {sk:'finance',label:'Finance'},
+    {sk:'food',label:'Food & hotels'}
+  ]},
+  {k:'activity',label:'Development & sales',common:false,mode:'pct',items:[
+    {sk:'demolitions',label:'Teardowns per 1,000 homes'},
+    {sk:'homesales',label:'Home sales per 1,000'}
+  ]}
+];
+let _tmCat='sectors',_tmSel={};
+TM_CAT.forEach(function(c){c.items.forEach(function(it){it.k=c.k+'_'+it.sk;it.mode=c.mode;_tmSel[it.k]=true;});});
+function _fmtBlue(v,mode){if(mode==='pts')return (Math.round(v*10)/10)+'%';if(Math.abs(v)<10)return (Math.round(v*100)/100).toString();return Math.round(v).toLocaleString();}
+function blueBA(it){var B=window.BLUE_TS;if(!B||!B.series||!B.series[it.sk])return null;var s=B.series[it.sk];
+  var ys=B.years.filter(function(y){return s.vals[y]!=null&&!isNaN(s.vals[y]);});if(ys.length<2)return null;
+  var by=ys[0],ly=ys[ys.length-1],bv=s.vals[by],av=s.vals[ly];var delta;
+  if(it.mode==='pts'){var d=av-bv;delta=(d>=0?'+':'−')+(Math.round(Math.abs(d)*10)/10)+' pts';}
+  else{var p=bv?(av-bv)/Math.abs(bv)*100:0;delta=(p>=0?'+':'−')+Math.abs(Math.round(p))+'%';}
+  return {label:it.label,bv:bv,av:av,beforeT:_fmtBlue(bv,it.mode),afterT:_fmtBlue(av,it.mode),years:by+' → '+ly,up:av>=bv,delta:delta};
+}
+function _tmBar(w,c,val,lab,bold){return '<div style="display:grid;grid-template-columns:42px 1fr 80px;gap:8px;align-items:center;margin:3px 0">'+
+  '<span style="font-size:11px;color:#94a3b8">'+lab+'</span>'+
+  '<div style="background:#eef2f7;border-radius:5px;height:15px;overflow:hidden"><div style="height:15px;width:'+w+'%;background:'+c+';border-radius:5px"></div></div>'+
+  '<span style="font-size:12px;text-align:right;'+(bold?'font-weight:700;color:var(--ink)':'color:#64748b')+'">'+val+'</span></div>';}
+function drawTmScore(){var host=document.getElementById('tmScore');if(!host)return;
+  var cat=null;TM_CAT.forEach(function(c){if(c.k===_tmCat)cat=c;});if(!cat)cat=TM_CAT[0];
+  var catChips=TM_CAT.map(function(c){return '<span class="chip '+(c.k===_tmCat?'on':'')+'" data-tcat="'+c.k+'">'+esc(c.label)+'</span>';}).join('');
+  var varChips=cat.items.map(function(it){return '<span class="chip '+(_tmSel[it.k]?'on':'')+'" data-tvar="'+it.k+'">'+esc(it.label)+'</span>';}).join('');
+  var data=cat.items.filter(function(it){return _tmSel[it.k];}).map(function(it){return blueBA(it);}).filter(function(r){return r;});
+  var smax=0;if(cat.common)data.forEach(function(r){smax=Math.max(smax,r.bv,r.av);});smax=smax*1.05;
+  var rows=data.map(function(r){var col=r.up?{bar:'#d99a1c',bg:'#fbeed7',tx:'#7a5410',ar:'▲'}:{bar:'#1f6feb',bg:'#e7f0fd',tx:'#0c447c',ar:'▼'};
+    var mx=cat.common?(smax||1):(Math.max(r.bv,r.av)*1.05||1);
+    var bw=Math.max(2,Math.round(r.bv/mx*100)),aw=Math.max(2,Math.round(r.av/mx*100));
+    return '<div style="padding:12px 0;border-bottom:1px solid var(--line2)">'+
+      '<div class="spread" style="margin-bottom:4px"><div style="font-size:13px;font-weight:600;color:var(--ink)">'+esc(r.label)+' <span style="font-weight:400;color:#94a3b8;font-size:11px">'+esc(r.years)+'</span></div>'+
+      '<span style="font-size:12px;font-weight:700;padding:2px 10px;border-radius:999px;background:'+col.bg+';color:'+col.tx+'">'+col.ar+' '+r.delta+'</span></div>'+
+      _tmBar(bw,'#cbd5e1',r.beforeT,'before',false)+_tmBar(aw,col.bar,r.afterT,'after',true)+
+    '</div>';}).join('');
+  host.innerHTML='<div class="card" style="margin-top:6px">'+
+    '<div class="spread" style="align-items:center"><h3 style="margin:0">Before → after · Blue Line corridor</h3><button class="btn ghost sm" onclick="downloadBeforeAfter()">⬇ CSV</button></div>'+
+    '<div class="small mut" style="margin:4px 0 8px">All figures below are for the <b>Blue Line corridor</b> — the line you learn from before predicting the Red Line.</div>'+
+    '<div class="small mut" style="margin:8px 0 4px"><b>1 ·</b> Pick a category:</div><div class="chips" style="margin-bottom:8px">'+catChips+'</div>'+
+    '<div class="small mut" style="margin:4px 0 4px"><b>2 ·</b> Show which? (pick one or more)</div><div class="chips" style="margin-bottom:10px">'+varChips+'</div>'+
+    (cat.common?'<div class="small mut" style="font-size:11px;margin-bottom:8px">Bars share one scale — compare these directly.</div>':'<div class="small mut" style="font-size:11px;margin-bottom:8px">Different units, so each row is scaled to itself.</div>')+
+    (rows||'<div class="small mut">Pick at least one above.</div>')+
+  '</div>';
+  host.querySelectorAll('[data-tcat]').forEach(function(c){c.onclick=function(){_tmCat=this.dataset.tcat;drawTmScore();};});
+  host.querySelectorAll('[data-tvar]').forEach(function(c){c.onclick=function(){_tmSel[this.dataset.tvar]=!_tmSel[this.dataset.tvar];drawTmScore();};});
 }
 function tmClipText(){
   const def=TM_SERIES[_tm]||TM_SERIES.homeval;let b;try{b=def.build();}catch(e){return def.label;}
@@ -971,7 +1261,7 @@ VIEWS.model=function(){
   <div class="card">
     <div class="kick">Reason · model lab</div>
     <h2>Build and test a rule</h2>
-    <p class="small mut">Pick the signals you think mark a business at risk. The lab fits a rule on <b>${TRAIN_FIT.length.toLocaleString()}</b> Blue and Silver businesses, then checks it on <b>${TRAIN_HOLD.length.toLocaleString()}</b> it never saw. The gap between those two scores is the point.</p>
+    <p class="small mut">Pick the signals you think predict displacement. The lab fits a rule on <b>${TRAIN_FIT.length.toLocaleString()}</b> Blue and Silver businesses, then checks it on <b>${TRAIN_HOLD.length.toLocaleString()}</b> it never saw. The gap between those two scores is the point.</p>
   </div>
   <div class="grid2">
     <div class="card">
@@ -1026,7 +1316,7 @@ function fitAndShow(){
     const up=c.b>=0;const col=up?'var(--red)':'var(--good)';const w=Math.min(50,mag/maxB*50);
     return `<div class="coefrow"><div>${esc(featLabel(c.k))}</div>
       <div class="coefbar"><div class="zero"></div><div class="fill" style="background:${col};${up?'left:50%':'right:50%'};width:${w}%"></div></div>
-      <div class="coefval" style="color:${col}">${word} ${up?'increases':'lowers'} risk${c.imp>=40?` <span class="mut">(${c.imp}% filled in)</span>`:''}</div></div>`;}).join('');
+      <div class="coefval" style="color:${col}">${word} ${up?'raises':'lowers'} the displacement score${c.imp>=40?` <span class="mut">(${c.imp}% filled in)</span>`:''}</div></div>`;}).join('');
   // sector deliverable (business-type level)
   const sec={};TRAIN_FIT.forEach(r=>{const s=bzVal(r,'sector');if(!isNum(s))return;(sec[s]=sec[s]||[]).push(predict(model,r));});
   const secRank=Object.keys(sec).map(s=>({s:SECTORS[s],v:mean(sec[s]),n:sec[s].length})).sort((a,b)=>b.v-a.v);
@@ -1176,17 +1466,17 @@ const MISSIONS=[
    tool:'map',
    checks:['Which two or three neighborhoods look <i>most</i> exposed, with low income, many renters and active demolition, and which look insulated?']},
   {id:'m2',t:'Is the Red corridor really different?',time:'25 min',phase:1,
-   q:'The brief warns the Red Line is wealthier. Is that true, and does "wealthier" mean "safer" for local shops?',
+   q:'The brief warns the Red Line is wealthier. Is that true, and does "wealthier" mean local shops are more likely to survive?',
    steps:['In Chart studio (Neighborhood level), plot <b>income</b> (X) vs <b>residential demolitions</b> (Y). Color by "Red Line vs rest".',
      'Switch to the "Carry to the Red Line" view and read the Blue/Silver/Red comparison table.',
      'Clip the comparison.'],
    tool:'chart',
-   checks:['Name three concrete ways the Red corridor differs from the Blue. For each, say whether it makes local businesses <i>safer</i>, <i>more exposed</i>, or <i>just different</i>.']},
+   checks:['Name three concrete ways the Red corridor differs from the Blue. For each, say whether it makes local businesses <i>more likely to survive</i>, <i>more likely to close</i>, or <i>just different</i>.']},
   {id:'m3',t:'Where is the land turning over?',time:'30 min',phase:1,
    q:'Displacement starts with land. Where is the building worth little next to the dirt it sits on?',
    steps:['Map studio: shade by <b>% parcels underutilized</b> and <b>% out-of-state owners</b>.',
      'Chart studio (Neighborhood): plot <b>% underutilized</b> vs <b>demolitions</b>. Is the signal real?',
-     'Both of these are ingredients the City used to build its own index. Hold that thought for the Model lab.'],
+     'Both of these are ingredients the City used to build its own index. Hold that thought for Stage 1, where the index is just one optional input.'],
    tool:'map',
    checks:['Where is redevelopment pressure highest? Does it line up with the train, or with something else (downtown, the river, the airport)?']},
   {id:'m4',t:'What happened to retail?',time:'30 min',phase:1,
@@ -1198,45 +1488,45 @@ const MISSIONS=[
    checks:['Who is being replaced by whom along the built corridors? What evidence separates a real shift from a measurement artefact?']},
   {id:'m5',t:'Does more always mean better?',time:'25 min',phase:1,
    q:'A model with more inputs usually scores higher on the data it trained on. Is it actually better on new businesses?',
-   steps:['Open the Survival model. Start with a few plain inputs such as distance, land value and owns building. Note the Red-Line accuracy and AUC.',
+   steps:['Open Stage 1 (Build the model). Start with a few plain inputs such as distance, land value and owns building. Note the Red-Line accuracy and AUC.',
      'Add more inputs, including the City displacement score. Watch training accuracy against the held-out Red-Line accuracy.',
      'Decide whether each added input helps on the Red Line, or just fits the Blue and Silver businesses better.'],
    tool:'survival1',
    checks:['Which inputs raised Red-Line accuracy, and which only raised training accuracy? Why is the held-out number the honest one?']},
   {id:'m6',t:'Does "near a station" even matter?',time:'25 min',phase:1,
    q:'The premise is that proximity to the train changes a business’s odds. Test it instead of assuming it.',
-   steps:['In the Survival model, include <b>distance to station</b> and read its coefficient: does being closer raise or lower survival?',
+   steps:['In Stage 1, include <b>distance to station</b> and read its coefficient: does being closer raise or lower survival?',
      'Compare it against a stronger signal such as owning the building.',
      'Remember distance is measured to the nearest station on the business’s own line.'],
    tool:'survival1',
    checks:['Does proximity actually move survival in this data? How big is it next to the strongest factor, and could a third factor explain it?']},
   {id:'m7',t:'Build and defend your survival model',time:'40 min',phase:1,
    q:'Commit to a set of inputs that predicts which businesses stay active.',
-   steps:['In the Survival model, choose the inputs you trust and read the coefficient chart: which factors raise survival, which lower it?',
+   steps:['In Stage 1, choose the inputs you trust and read the coefficient chart: which factors raise survival, which lower it?',
      'Aim for high Red-Line accuracy and AUC, but keep a version you can explain, not just the highest number.',
      'Your model is ready to read on the map.'],
    tool:'survival1',
    checks:['State your model in one sentence. What is its Red-Line accuracy versus the baseline, and which inputs did you trust most?']},
   {id:'m8',t:'Read it on the Red Line',time:'35 min',phase:2,
-   q:'Your model learned on Blue and Silver. Where does it expect survivors and at-risk businesses on the Red Line, and is it right?',
-   steps:['In the Survival model, look at the two maps and toggle <b>predicted</b> versus <b>actual</b> survival.',
+   q:'Your model learned on Blue and Silver. Where does it expect survivors and businesses likely to close on the Red Line, and is it right?',
+   steps:['In Stage 2, look at the two maps and toggle <b>predicted</b> versus <b>actual</b> survival.',
      'Find neighborhoods where the model is confident, and where it is wrong.',
      'Clip the result and note the Red-Line accuracy.'],
    tool:'survival3',
    checks:['Where does the model transfer well to the Red Line, and where does it miss? What might explain the misses?']},
   {id:'m9',t:'Argue against yourself',time:'20 min',phase:2,
    q:'The strongest analyst states the best case <i>against</i> their own conclusion.',
-   steps:['Revisit anything you clipped. Find the evidence that complicates your story.',
-     'In “Putting together your analysis”, make the case for who is affected and how far the model transfers to the Red Line.',
+   steps:['Revisit your shortlist and your model. Find the evidence that complicates your story.',
+     'In the answer box below, write the case for who is affected and how far the model transfers to the Red Line.',
      'It is fully legitimate to conclude the model partly does <i>not</i> transfer to the wealthier Red corridor.'],
-   tool:'argument',
-   checks:['What is the single best argument that your at-risk story is wrong or overstated? How would you check it with more data?']},
+   tool:'survival3',
+   checks:['What is the single best argument that your story about which businesses close is wrong or overstated? How would you check it with more data?']},
   {id:'m10',t:'Make your case',time:'25 min',phase:2,
    q:'Assemble everything into one defensible recommendation for the City.',
-   steps:['Putting together your analysis: write the three sections and drag your clipped evidence into each.',
-     'Watch the progress meter and fill the weak sections.',
-     'Export your case.'],
-   tool:'argument',
+   steps:['In the answer box below, write your recommendation: which Red Line businesses or areas the City should prioritize, and why.',
+     'Make sure your shortlist in Stage 2 reflects your top picks; export it (CSV) for your slides.',
+     'Build your final presentation in the <a href="https://docs.google.com/presentation/d/1T5wEt3Wh-vwK5j-QskoAHFabN6Kc-ZhFS4spuLkn7ro/copy" target="_blank" rel="noopener">slide template</a> (opens your own copy) and present it.'],
+   tool:'survival3',
    checks:['If the City could act on only three of your flagged areas or business types, which three and why?']},
 ];
 VIEWS.missions=function(){
@@ -1244,9 +1534,9 @@ VIEWS.missions=function(){
   const done=MISSIONS.filter(x=>S.missions[x.id]&&S.missions[x.id].done).length;
   m.innerHTML=`
   <div class="card">
-    <div class="kick">Reason · missions</div>
-    <h2>Missions</h2>
-    <p class="small mut">Each mission points you to a tool and asks what you concluded. Your answers build your final case. Do them in order or jump around.</p>
+    <div class="kick">Orient · your tasks</div>
+    <h2>Tasks</h2>
+    <p class="small mut">Each task points you to a tool and asks what you concluded. You are predicting <b>business survival</b>; your answers build your final case. Do them in order or jump around.</p>
     <div class="spread"><div class="meter" style="flex:1;margin-right:12px"><i style="width:${pct(done,MISSIONS.length)}%"></i></div><b>${done}/${MISSIONS.length} complete</b></div>
   </div>
   <div id="missionList"></div>`;
@@ -1259,7 +1549,7 @@ function drawMissions(){
     return `<div class="mcard ${st.done?'done':''} ${open?'open':''}" data-m="${m.id}">
       <div class="mhead" onclick="toggleMission('${m.id}')">
         <div class="mnum">${st.done?'✓':i+1}</div>
-        <div style="flex:1"><div class="mtitle">${esc(m.t)}</div><div class="mmeta">${m.phase===2?'Phase 2 · Red Line':'Phase 1 · learn from Blue & Silver'}</div></div>
+        <div style="flex:1"><div class="mtitle">${esc(m.t)}</div><div class="mmeta">${m.phase===2?'Part 2 · The Red Line':'Part 1 · Learn from Blue & Silver'}</div></div>
         <div class="small mut">${open?'▾':'▸'}</div>
       </div>
       <div class="mbody">
@@ -1268,81 +1558,136 @@ function drawMissions(){
         <button class="btn ghost sm" onclick="go('${m.tool}')">Open ${NAV.flatMap(g=>g.items).find(x=>x.id===m.tool).t} →</button>
         <div style="margin-top:12px">${m.checks.map((c,j)=>`<div style="margin-bottom:8px"><div class="small" style="font-weight:600;margin-bottom:4px">${c}</div>
           <textarea data-mc="${m.id}:${j}" placeholder="Your answer…">${esc((st.answers&&st.answers[j])||'')}</textarea></div>`).join('')}</div>
-        <button class="btn sm" onclick="completeMission('${m.id}')">${st.done?'✓ Completed (tap to reopen)':'Mark mission complete'}</button>
+        <button class="btn sm" onclick="completeMission('${m.id}')">${st.done?'✓ Completed (tap to reopen)':'Mark task complete'}</button>
       </div></div>`;
   }).join('');
   document.querySelectorAll('[data-mc]').forEach(t=>t.oninput=function(){const [id,j]=this.dataset.mc.split(':');
     S.missions[id]=S.missions[id]||{answers:{}};S.missions[id].answers=S.missions[id].answers||{};S.missions[id].answers[j]=this.value;save();});
 }
 function toggleMission(id){S.missions[id]=S.missions[id]||{};S.missions[id].open=!S.missions[id].open;save();drawMissions();}
-function completeMission(id){S.missions[id]=S.missions[id]||{};S.missions[id].done=!S.missions[id].done;save();drawMissions();renderRail();toast(S.missions[id].done?'Mission complete ✓':'Reopened');}
-/* ---------------- ARGUMENT BOARD ---------------- */
-const SLOTS=[
-  {k:'learn',t:'1 · What the Blue + Silver model taught you',guide:['How good is the model? Cite your Red-test accuracy, AUC and the majority baseline from the Survival model.','Which inputs matter most, and explain why each one moves survival, using a Correlations cell or a Chart studio plot.']},
-  {k:'apply',t:'2 · Applying it to the Red Line',guide:['What did you change when you carried the model to the Red Line, and why? Think about the different mix of businesses, the distances, and the displacement score.','Where does it expect survivors versus at-risk businesses? Cite the ranked Red Line predictions.']},
-  {k:'factors',t:'3 · Additional factors to consider',guide:['What outside data (Zillow home values and rents, rezoning activity) or local knowledge changes the picture?','Limits to be honest about: business status is business-level but the displacement score is neighborhood-level, correlation is not cause, and the Red corridor differs from where you trained.']},
+function completeMission(id){S.missions[id]=S.missions[id]||{};S.missions[id].done=!S.missions[id].done;save();drawMissions();renderRail();toast(S.missions[id].done?'Task complete ✓':'Reopened');}
+/* ---------------- FEEDBACK ---------------- */
+const FB_APP=[
+  ['app_ease','The web app was easy to use'],
+  ['app_tools','The tools helped me understand the data'],
+  ['app_clear','It was clear what to do at each step'],
+  ['app_design','The app looked clean and professional']
 ];
-if(!S.argumentText)S.argumentText={};
-SLOTS.forEach(s=>{if(!S.argument[s.k])S.argument[s.k]=[];if(S.argumentText[s.k]==null)S.argumentText[s.k]='';});
-function argScore(){let filled=0;SLOTS.forEach(s=>{if((S.argumentText[s.k]&&S.argumentText[s.k].trim())||S.argument[s.k].length)filled++;});return {filled,total:SLOTS.length};}
-VIEWS.argument=function(){
-  const m=document.getElementById('main');
-  const sc=argScore();
-  let workCard='';
-  if(window.RL2&&typeof smSelected==='function'){
-    const sel=smSelected();
-    if(sel.length){
-      const model=smTrain(),teM=smMetrics(model,window.RL2.test),trM=smMetrics(model,window.RL2.train);
-      const pairs=model.keys.map((k,j)=>[smLabel(k),model.w[j]]).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
-      const top=pairs.slice(0,4).map(p=>p[0]+' ('+(p[1]>=0?'+':'')+p[1].toFixed(2)+')').join(', ');
-      workCard='<div class="card"><h3 style="margin-bottom:8px">Your model so far</h3>'+
-        '<div class="note" style="margin-top:0"><b>Inputs:</b> '+sel.map(smLabel).map(esc).join(', ')+'</div>'+
-        '<div class="note"><b>Red Line accuracy:</b> '+(teM.acc*100).toFixed(1)+'% vs '+(teM.base*100).toFixed(1)+'% baseline · <b>AUC</b> '+teM.auc.toFixed(3)+' · train '+(trM.acc*100).toFixed(1)+'%</div>'+
-        '<div class="note"><b>Strongest signals:</b> '+esc(top)+' <span class="mut">(positive raises survival)</span></div></div>';
-    } else {
-      workCard='<div class="card"><div class="warnbox">No model yet. Open the Survival model, choose inputs, then come back.</div></div>';
-    }
-  }
-  m.innerHTML=`
-  <div class="card">
-    <div class="kick">Conclude · put it all together</div>
-    <h2>Putting together your analysis</h2>
-    <p class="lede">The spine of your pitch. Work top to bottom: what you learned on Blue and Silver, how it carries to the Red Line, and what else matters. Write each section in your own words.</p>
-    <div class="spread"><div class="meter" style="flex:1;margin-right:12px"><i style="width:${pct(sc.filled,sc.total)}%;background:${sc.filled===sc.total?'var(--good)':'var(--blue)'}"></i></div><b>${sc.filled}/${sc.total} sections written</b></div>
-  </div>
-  ${workCard}
-  <div id="slots"></div>
-  <div class="card"><div class="row"><button class="btn" onclick="exportCase()">⬇ Export my case (HTML)</button><button class="btn sec" onclick="go('survival1')">Back to the model</button></div></div>`;
-  renderArgument();
+const FB_EVENT=[
+  ['ev_overall','My overall experience at the event was good'],
+  ['ev_learn','I learned something useful'],
+  ['ev_org','The event was well organized'],
+  ['ev_recommend','I would recommend this challenge to a friend']
+];
+function fbSlider(key,label){var v=(S.feedback&&S.feedback[key]!=null)?S.feedback[key]:3;
+  return '<div style="margin:12px 0"><div class="spread" style="margin-bottom:3px"><div style="font-size:13px;color:#334155">'+esc(label)+'</div><div style="font-weight:800;font-size:14px;width:26px;text-align:right;color:#1f6feb" id="fbv_'+key+'">'+v+'</div></div>'+
+    '<input type="range" min="1" max="5" step="1" value="'+v+'" data-fb="'+key+'" style="width:100%;accent-color:#1f6feb">'+
+    '<div class="spread" style="font-size:10px;color:#94a3b8"><span>1 · strongly disagree</span><span>strongly agree · 5</span></div></div>';}
+VIEWS.feedback=function(){
+  var m=document.getElementById('main');
+  m.innerHTML='<div class="card">'+
+    '<div class="kick">Wrap up · feedback</div>'+
+    '<h2>Tell us what you thought</h2>'+
+    '<p class="lede">A few quick ratings and two short questions. It takes about a minute and helps us improve both the tool and the event.</p>'+
+  '</div>'+
+  '<div class="grid2">'+
+    '<div class="card"><h3 style="margin-bottom:4px">About the web app</h3>'+FB_APP.map(function(f){return fbSlider(f[0],f[1]);}).join('')+'</div>'+
+    '<div class="card"><h3 style="margin-bottom:4px">About the event</h3>'+FB_EVENT.map(function(f){return fbSlider(f[0],f[1]);}).join('')+'</div>'+
+  '</div>'+
+  '<div class="card"><h3 style="margin-bottom:6px">In your own words</h3>'+
+    '<div class="small mut" style="margin-bottom:3px">What worked well?</div><textarea data-fbq="liked" placeholder="The part I liked most was…" style="min-height:80px">'+esc((S.feedback&&S.feedback.liked)||'')+'</textarea>'+
+    '<div class="small mut" style="margin:12px 0 3px">What would you improve?</div><textarea data-fbq="improve" placeholder="One thing that would make this better…" style="min-height:80px">'+esc((S.feedback&&S.feedback.improve)||'')+'</textarea>'+
+  '</div>'+
+  '<div class="card"><div id="fbStatus"></div><div class="row" style="gap:8px">'+
+    '<button class="btn" id="fbSubmitBtn" onclick="fbSubmit()">Submit results &amp; feedback</button>'+
+    '<button class="btn sec" onclick="fbDownload()">⬇ Download a copy</button></div>'+
+    '<p class="small mut" style="margin-top:8px">Submitting sends your team name, email, key model results (inputs, Red Line accuracy, shortlist size) and these ratings to the organizer ('+ORGANIZER_EMAIL+').'+(SUBMIT_URL?'':' <b>Note:</b> automatic saving is not switched on yet, so use Download and send the file in.')+'</p></div>';
+  document.querySelectorAll('[data-fb]').forEach(function(sl){sl.oninput=function(){if(!S.feedback)S.feedback={};S.feedback[this.dataset.fb]=+this.value;var el=document.getElementById('fbv_'+this.dataset.fb);if(el)el.textContent=this.value;save();};});
+  document.querySelectorAll('[data-fbq]').forEach(function(t){t.oninput=function(){if(!S.feedback)S.feedback={};S.feedback[this.dataset.fbq]=this.value;save();};});
 };
-function renderArgument(){
-  const host=document.getElementById('slots');if(!host)return;
-  host.innerHTML=SLOTS.map(s=>{
-    const guide=(s.guide||[]).map(g=>'<div class="step" style="display:flex;gap:8px;align-items:flex-start;margin:7px 0;font-size:13px"><span style="flex:none;color:var(--blue);font-weight:700;line-height:1.5">•</span><div>'+g+'</div></div>').join('');
-    return `<div class="slot" data-slot="${s.k}">
-      <h4>${s.t}</h4>
-      <div class="small mut" style="margin-bottom:4px">Show the judges:</div>${guide}
-      <textarea data-at="${s.k}" placeholder="Write this section…" style="margin-top:8px">${esc(S.argumentText[s.k]||'')}</textarea>
-    </div>`;}).join('');
-  host.querySelectorAll('[data-at]').forEach(t=>t.oninput=function(){S.argumentText[this.dataset.at]=this.value;save();});
+function fbDownload(){var f=S.feedback||{};var rows=[['question','rating (1-5) or answer']];
+  if(S.team&&S.team.name)rows.push(['team',S.team.name]);
+  FB_APP.concat(FB_EVENT).forEach(function(q){rows.push([q[1],f[q[0]]!=null?f[q[0]]:'']);});
+  rows.push(['What worked well?',f.liked||'']);rows.push(['What would you improve?',f.improve||'']);
+  var csv=rows.map(function(r){return r.map(function(c){c=''+(c==null?'':c);return (c.indexOf(',')>=0||c.indexOf('"')>=0||c.indexOf('\n')>=0)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',');}).join('\n');
+  download('charlotte_feedback.csv',csv);toast('Feedback downloaded');}
+function fbMetrics(){var mm=(typeof smResultsModel==='function')?smResultsModel():null;
+  var done=(MISSIONS||[]).filter(function(x){return S.missions[x.id]&&S.missions[x.id].done;}).length;
+  return {inputs:mm?mm.inputs:[],redAccuracy:mm?mm.redAccuracy:null,baseline:mm?mm.baseline:null,auc:mm?mm.auc:null,
+    shortlistCount:(S.shortlist||[]).length,tasksComplete:done+'/'+((MISSIONS||[]).length),hypothesis:S.hypothesis||''};}
+function fbPayload(){var f=S.feedback||{};
+  return {type:'charlotte_submission',team:(S.team&&S.team.name)||'',email:(S.team&&S.team.email)||'',organizer:ORGANIZER_EMAIL,submittedAt:new Date().toISOString(),
+    metrics:fbMetrics(),
+    feedback:{app_ease:f.app_ease,app_tools:f.app_tools,app_clear:f.app_clear,app_design:f.app_design,ev_overall:f.ev_overall,ev_learn:f.ev_learn,ev_org:f.ev_org,ev_recommend:f.ev_recommend,liked:f.liked||'',improve:f.improve||''}};}
+function fbSubmit(){
+  if(!gateOK()){toast('Please sign in with your team first');renderGate();return;}
+  var p=fbPayload();var btn=document.getElementById('fbSubmitBtn');if(btn){btn.disabled=true;btn.textContent='Saving…';}
+  function done(ok){var s=document.getElementById('fbStatus');
+    if(s)s.innerHTML=ok?'<div class="okbox">&#10003; Saved. Thanks &mdash; your results and feedback were sent to the organizer.</div>'
+      :'<div class="warnbox">Could not reach the server. Use <b>Download a copy</b> below and email it to '+ORGANIZER_EMAIL+'.</div>';
+    if(btn){btn.disabled=false;btn.textContent='Submit results & feedback';}S.submitted=Date.now();save();}
+  if(!SUBMIT_URL){done(false);return;}
+  try{fetch(SUBMIT_URL,{method:'POST',mode:'no-cors',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(p)}).then(function(){done(true);}).catch(function(){done(false);});}
+  catch(err){done(false);}
 }
-function argRemove(slot,id){S.argument[slot]=S.argument[slot].filter(x=>x!==id);save();renderArgument();renderRail();}
-function exportCase(){
-  const sm=(S.indexDef&&Object.values(S.indexDef.weights||{}).some(w=>w))?S.indexDef:null;
-  const evList=id=>{const p=S.pins.find(x=>x.id===id);return p?`<li>${esc(p.text)} <i style="color:#888">(${esc(p.src)})</i></li>`:'';};
-  const slotHtml=SLOTS.map(s=>`<h3>${s.t}</h3><p>${esc(S.argumentText[s.k]||'<em>(not written)</em>').replace(/&lt;em&gt;/g,'<em>').replace(/&lt;\/em&gt;/g,'</em>')}</p>`).join('');
-  const triage=(typeof _triage!=='undefined'&&_triage&&_triage.length)?`<h3>Red Line priority list (top 10)</h3><ol>${_triage.slice(0,10).map(t=>`<li>${t.town||'NPA '+t.npa}: score ${t.score.toFixed(2)}, demolitions after: ${isNum(t.demoPost)?t.demoPost:'—'}</li>`).join('')}</ol>`:'';
-  let model='';
-  if(window.RL2&&typeof smSelected==='function'&&smSelected().length){const _mm=smTrain(),_te=smMetrics(_mm,window.RL2.test);model='<h3>My survival model</h3><p>Target: Business Status (survival). Inputs: <b>'+smSelected().map(smLabel).join(', ')+'</b>. Red Line accuracy '+(_te.acc*100).toFixed(1)+'% vs '+(_te.base*100).toFixed(1)+'% baseline, AUC '+_te.auc.toFixed(3)+'.</p>';}
-  const html=`<!doctype html><meta charset=utf-8><title>Charlotte Decision Challenge, my case</title>
-  <body style="font-family:Inter,Arial,sans-serif;max-width:740px;margin:32px auto;padding:0 18px;line-height:1.6;color:#16202e">
-  <h1 style="color:#8b1e3f">Charlotte Decision Challenge</h1>
-  <p style="color:#666">Generated ${new Date().toLocaleString()} · ${MISSIONS.filter(x=>S.missions[x.id]&&S.missions[x.id].done).length}/${MISSIONS.length} missions complete</p>
-  <h3>My original hypothesis</h3><p>${esc(S.hypothesis||'(none recorded)')}</p>
-  <hr>${slotHtml}${model}${triage}
-  </body>`;
-  download('my_charlotte_case.html',html);toast('Case exported');
+/* ---------------- ARGUMENT BOARD ---------------- */
+/* ============================================================
+ * FINISH & SUBMIT  (results go to a Google Sheet via Apps Script)
+ * ============================================================ */
+// Paste your Google Apps Script Web App URL between the quotes to turn on automatic
+// submission to your Google Sheet. Leave empty to fall back to a downloadable file.
+const ORGANIZER_EMAIL='vgude@elon.edu';
+// Paste your Google Apps Script Web App URL between the quotes to save results + feedback to your Google Sheet.
+const SUBMIT_URL='';
+function smResultsModel(){if(!(window.RL2&&typeof smSelected==='function'&&smSelected().length))return null;
+  var mm=smTrain(),te=smMetrics(mm,window.RL2.test);
+  return {inputs:smSelected().map(smLabel),redAccuracy:+(te.acc*100).toFixed(1),baseline:+(te.base*100).toFixed(1),auc:+te.auc.toFixed(3)};}
+function buildResults(){
+  var answers={};(MISSIONS||[]).forEach(function(m){var st=S.missions[m.id];if(st&&st.answers){var a=Object.keys(st.answers).map(function(k){return st.answers[k];}).filter(function(x){return x&&x.trim();});if(a.length)answers[m.t]=a;}});
+  var done=(MISSIONS||[]).filter(function(m){return S.missions[m.id]&&S.missions[m.id].done;}).length;
+  var shortlist=[];try{var e=exEnsure();var byId={};e._scored.forEach(function(o){byId[o.id]=o;});(S.shortlist||[]).forEach(function(id){var o=byId[id];if(o)shortlist.push({id:id,sector:o.sector,neighborhood:smTown(o.npa),npa:o.npa,survivalPct:Math.round(o.p*100),outlook:exBand(o.p).label});});}catch(err){}
+  return {team:(S.team&&S.team.name)||'',email:(S.team&&S.team.email)||'',organizer:ORGANIZER_EMAIL,submittedAt:new Date().toISOString(),
+    hypothesis:S.hypothesis||'',conclusion:S.conclusion||'',tasksComplete:done+'/'+((MISSIONS||[]).length),
+    model:smResultsModel(),answers:answers,shortlist:shortlist};
 }
+function downloadResults(){var r=buildResults();var fn=((r.team||'team').replace(/[^a-z0-9]+/gi,'_')||'team')+'_charlotte_results.json';download(fn,JSON.stringify(r,null,2));S.submitted=Date.now();save();toast('Results file downloaded');}
+function emailResults(){var r=buildResults();
+  var lines=['Team: '+r.team,'Email: '+r.email,'Tasks complete: '+r.tasksComplete];
+  if(r.model)lines.push('Survival model: '+r.model.inputs.join(', '),'Red Line accuracy: '+r.model.redAccuracy+'% vs '+r.model.baseline+'% baseline, AUC '+r.model.auc);
+  lines.push('Shortlisted businesses: '+(r.shortlist?r.shortlist.length:0),'','Recommendation:',r.conclusion||'(none written)','','(Please attach the results file you downloaded.)');
+  var href='mailto:'+encodeURIComponent(ORGANIZER_EMAIL)+'?cc='+encodeURIComponent(r.email||'')+'&subject='+encodeURIComponent('Charlotte Challenge results - '+(r.team||'team'))+'&body='+encodeURIComponent(lines.join('\n'));
+  window.location.href=href;}
+VIEWS.submit=function(){
+  var m=document.getElementById('main');
+  var mdl=smResultsModel();
+  var done=(MISSIONS||[]).filter(function(x){return S.missions[x.id]&&S.missions[x.id].done;}).length;
+  var shortN=(S.shortlist||[]).length;
+  m.innerHTML='<div class="card">'+
+    '<div class="kick">Finish</div>'+
+    '<h2>Finish &amp; submit</h2>'+
+    '<p class="lede">Review your work, write a short recommendation, then download your results and email them to the organizer.</p>'+
+    '<div class="note" style="margin-top:0"><b>Team:</b> '+esc((S.team&&S.team.name)||'—')+' &middot; '+esc((S.team&&S.team.email)||'')+'</div>'+
+  '</div>'+
+  '<div class="grid2">'+
+    '<div class="card"><h3 style="margin-bottom:8px">Your work so far</h3>'+
+      '<div class="note" style="margin-top:0"><b>Tasks complete:</b> '+done+' / '+((MISSIONS||[]).length)+'</div>'+
+      (mdl?('<div class="note"><b>Survival model inputs:</b> '+esc(mdl.inputs.join(', '))+'</div>'+
+            '<div class="note"><b>Red Line accuracy:</b> '+mdl.redAccuracy+'% vs '+mdl.baseline+'% baseline &middot; AUC '+mdl.auc+'</div>')
+           :'<div class="warnbox">No model yet &mdash; build one in Stage 1 before you submit.</div>')+
+      '<div class="note"><b>Shortlisted businesses:</b> '+shortN+'</div>'+
+    '</div>'+
+    '<div class="card"><h3 style="margin-bottom:8px">Your recommendation</h3>'+
+      '<p class="small mut" style="margin-top:0">In a few sentences: which Red Line businesses or areas should the City prioritize for support, and why?</p>'+
+      '<textarea id="subConc" placeholder="Our analysis suggests…" style="min-height:150px">'+esc(S.conclusion||'')+'</textarea>'+
+    '</div>'+
+  '</div>'+
+  '<div class="card">'+
+    '<div class="row" style="gap:8px"><button class="btn" onclick="downloadResults()">&#8595; Download my results file</button>'+
+    '<button class="btn sec" onclick="emailResults()">&#9993; Email the organizer</button></div>'+
+    '<p class="small mut" style="margin-top:10px">To hand in: download your results file, then email it to <b>'+ORGANIZER_EMAIL+'</b>. The Email button opens your mail app with a summary already written &mdash; just attach the file you downloaded.</p>'+
+  '</div>';
+  var ta=document.getElementById('subConc');if(ta)ta.oninput=function(){S.conclusion=this.value;save();};
+};
 
 /* ============================================================
  * DIG IN — neighborhood deep-dive  (re-added "follow one area all the way down")
@@ -1408,7 +1753,7 @@ function drawDig(){
   if(S.indexDef&&Object.values(S.indexDef.weights||{}).some(w=>w)){
     const scored=D.npa.filter(r=>npaLineToken(npaVal(r,'npa'))!=='').map(r=>({id:npaVal(r,'npa'),v:npaIndexScore(r)})).filter(x=>isNum(x.v)).sort((a,b)=>b.v-a.v);
     const pos=scored.findIndex(x=>x.id===id);
-    idxBlock=pos>=0?`<div class="okbox"><b>Your custom index</b> ranks this neighborhood <b>#${pos+1} of ${scored.length}</b> corridor areas for displacement risk (score ${scored[pos].v.toFixed(2)}). <span class="mut">Build/adjust it in “Build your own index”.</span></div>`:'';
+    idxBlock=pos>=0?`<div class="okbox"><b>Your custom index</b> ranks this neighborhood <b>#${pos+1} of ${scored.length}</b> corridor areas for displacement pressure (score ${scored[pos].v.toFixed(2)}). <span class="mut">Build/adjust it in “Build your own index”.</span></div>`:'';
   } else {
     idxBlock=`<div class="note">Build a weighted index in <b>“Build your own index”</b> and this area will show its rank here.</div>`;
   }
@@ -1426,7 +1771,7 @@ function drawDig(){
     </div>
   </div>
   <div class="grid2">
-    <div class="card"><h3 style="margin-bottom:6px">On the map</h3>
+    <div class="card"><div class="spread" style="margin-bottom:6px"><h3 style="margin:0">On the map</h3><div class="row" style="gap:6px"><button class="btn ghost sm" onclick="downloadDigMap()">⬇ Map (PNG)</button><button class="btn ghost sm" onclick="downloadDigBiz()">⬇ Businesses (CSV)</button></div></div>
       <div class="mapbox" id="digMap" style="height:360px"></div>
       <div class="diglegend">${[...new Set(biz.map(r=>r[BIZc.sector]).filter(x=>x!=null))].sort((a,b)=>a-b).map(si=>'<span class="legitem"><i style="background:'+SECTOR_COLORS[si]+'"></i>'+esc(SECTORS[si])+'</span>').join('')||'<span class="small mut">No businesses mapped in this area.</span>'}</div>
       <div class="small mut" style="margin-top:4px">${biz.length} businesses${_dig.sector!=null?' in '+esc(SECTORS[_dig.sector]):''} inside this neighborhood. Lighter lines are the other neighborhoods.</div></div>
@@ -1468,7 +1813,7 @@ function drawDig(){
   biz.forEach(r=>{const la=r[BIZc.lat],lo=r[BIZc.lon];if(!isNum(la)||!isNum(lo))return;const s=r[BIZc.sector];
     L.circleMarker([la,lo],{radius:3.5,color:'#fff',weight:.6,fillColor:SECTOR_COLORS[s]||'#888',fillOpacity:.85}).bindTooltip(SECTORS[s]||'business').addTo(dm);});
   ST_UNIQ.forEach(s=>{L.circleMarker([s[1],s[0]],{radius:4,color:'#111',weight:1,fillColor:LINEHEX[(s[3]||'').toLowerCase()]||'#333',fillOpacity:1}).bindTooltip(s[2]||'').addTo(dm);});
-  (window.RED_STATIONS||[]).forEach(s=>L.circleMarker([s.lat,s.lon],{radius:5,color:'#111',weight:1.2,fillColor:'#b3203a',fillOpacity:1}).bindTooltip('Red · '+s.name).addTo(dm));
+  (window.RED_STATIONS||[]).forEach(s=>L.circleMarker([s.mlat||s.lat,s.mlon||s.lon],{radius:5,color:'#111',weight:1.2,fillColor:'#b3203a',fillOpacity:1}).bindTooltip('Planned Red Line station: '+s.name).addTo(dm));
   setTimeout(()=>dm.invalidateSize(),60);
   document.querySelectorAll('#digBody [data-ds]').forEach(c=>c.onclick=function(){_dig.sector=this.dataset.ds==='all'?null:+this.dataset.ds;drawDig();});
 }
@@ -1507,7 +1852,7 @@ VIEWS.index=function(){
   <div class="card">
     <div class="kick">Reason · build your own index</div>
     <h2>Build your own index</h2>
-    <p class="small mut">Choose the neighborhood signals you think mark risk, then weight each one: negative protects, positive adds risk. The index is standardized on the Blue and Silver corridors and can be carried to the <b style="color:var(--red)">Red Line</b>.</p>
+    <p class="small mut">Choose the neighborhood signals you think predict closures, then weight each one: negative lowers the score, positive raises it. The index is standardized on the Blue and Silver corridors and can be carried to the <b style="color:var(--red)">Red Line</b>.</p>
   </div>
   <div class="card">
     <h3>1 · Choose your signals</h3>
@@ -1520,7 +1865,7 @@ VIEWS.index=function(){
   <div class="card">
     <h3>Your index on the Blue / Silver corridors</h3>
     <div class="mapbox" id="idxMap" style="height:440px"></div>
-    <div class="legend"><span>lower</span><div class="grad"></div><span>higher risk</span><span class="mut">· click an area to see its score</span></div>
+    <div class="legend"><span>lower</span><div class="grad"></div><span>higher pressure</span><span class="mut">· click an area to see its score</span></div>
     <div id="idxFeedback" style="margin-top:12px"></div>
   </div>
   <div class="card">
@@ -1610,12 +1955,12 @@ function idxClipText(){const red=D.npa.filter(r=>npaVal(r,'is_red')===1).map(r=>
 /* ============================================================
  * CORRELATION MATRIX
  * ============================================================ */
-let _corr={level:'npa',vars:null,line:''};
+let _corr={level:'biz',vars:null,line:''};
 function corrRows(){if(_corr.level==='surv'){let rs=window.RL2?RL2.train.concat(RL2.test):[];if(_corr.line){const li=RL2.cols.indexOf('line');rs=rs.filter(r=>r[li]===_corr.line);}return rs;}let rows=_corr.level==='biz'?ALLBIZ:D.npa;if(_corr.line){if(_corr.level==='biz')rows=rows.filter(r=>bzVal(r,'line')===_corr.line);else{const ln=_corr.line.toLowerCase();rows=rows.filter(r=>npaLineToken(npaVal(r,'npa')).split(';').indexOf(ln)>=0);}}return rows;}
 function corrVal(r,k){if(_corr.level==='surv')return r[RL2.cols.indexOf(k)];return _corr.level==='biz'?bzVal(r,k):npaVal(r,k);}
 function corrVarList(){
   if(_corr.level==='surv') return window.RL2?['survival'].concat(RL2.inputs.map(d=>d.key)):[];
-  if(_corr.level==='biz') return BIZ_NUM.filter(k=>k!=='displacement_index');
+  if(_corr.level==='biz') return BIZ_NUM;
   return D.catalog.filter(c=>c.level==='Neighborhood'&&(c.key in NPAI)&&c.key!=='npa'&&NPA_COV[c.key]>=COV_MIN).map(c=>c.key);
 }
 function corrDefault(){
@@ -1641,7 +1986,6 @@ VIEWS.corr=function(){
       <div class="chips" style="margin:0">
         <span class="chip ${_corr.level==='npa'?'on':''}" data-cl="npa">Neighborhood level</span>
         <span class="chip ${_corr.level==='biz'?'on':''}" data-cl="biz">Business level</span>
-        <span class="chip ${_corr.level==='surv'?'on':''}" data-cl="surv">Survival inputs</span>
       </div>
       <select id="corrLine" aria-label="Filter by line" style="margin-left:auto"><option value="">All corridors</option><option value="Blue">Blue</option><option value="Silver">Silver</option><option value="Red">Red</option></select>
     </div>
@@ -1649,6 +1993,7 @@ VIEWS.corr=function(){
     <div class="chips" id="corrPick" style="max-height:120px;overflow:auto"></div>
   </div>
   <div class="card">
+    <div class="row" style="justify-content:flex-end;margin-bottom:6px">${dlT('corrMatrix','correlations')}</div>
     <div class="scrollx" style="max-height:none"><div id="corrMatrix"></div></div>
     <div class="legend" style="margin-top:10px"><span>−1</span><div class="grad" style="background:linear-gradient(90deg,#1f6feb,#fff,#b3203a)"></div><span>+1</span><span class="mut">correlation</span><span id="corrClip" style="margin-left:auto"></span></div>
   </div>`;
@@ -1686,7 +2031,7 @@ function corrClipText(){
   if(vars.indexOf(tgt)<0)return `Correlations among ${vars.length} ${_corr.level==='biz'?'business':'neighborhood'} measures.`;
   const tcol=rows.map(r=>corrVal(r,tgt));
   let best=null;vars.forEach(k=>{if(k===tgt)return;const r=pearson(tcol,rows.map(rr=>corrVal(rr,k)));if(r!=null&&(best==null||Math.abs(r)>Math.abs(best.r)))best={k,r};});
-  return best?`Strongest link to risk (${_corr.level} level): ${catLabel(best.k)}, r=${best.r.toFixed(2)} (${rWord(best.r)}).`:`Correlations among ${vars.length} measures.`;
+  return best?`Strongest link to the outcome (${_corr.level} level): ${catLabel(best.k)}, r=${best.r.toFixed(2)} (${rWord(best.r)}).`:`Correlations among ${vars.length} measures.`;
 }
 
 
@@ -1810,7 +2155,7 @@ VIEWS.present=function(){
     <div class="note" style="margin-top:0"><b>Index weights:</b> ${weightsTxt}</div>
     ${S.indexBestMae!=null?`<div class="note"><b>Best match to the City score:</b> average miss ${S.indexBestMae.toFixed(2)} points (0 to 5 scale).</div>`:''}
     <div class="note"><b>Red Line similarity verdict:</b> ${simTxt}${adapted?` · down-weighted for Red: ${adapted}`:''}</div>
-    <div class="row" style="margin-top:10px"><button class="btn" onclick="exportCase()">⬇ Export my case (HTML)</button><button class="btn ghost" onclick="go('argument')">Open ‘Put it all together’ →</button></div>
+    <div class="row" style="margin-top:10px"><button class="btn" onclick="go('survival3')">Go to Stage 2 · Apply to the Red Line →</button></div>
   </div>`;
 };
 
@@ -1847,7 +2192,7 @@ function smFmt(k,v){if(v==null||isNaN(v))return '—';var f=(SM_BYK[k]||{}).fmt;
   if(f==='disp')return v.toFixed(2);
   return (Math.abs(v)>=1000?Math.round(v).toLocaleString():v.toFixed(2));}
 const SM={inputs:{}};
-(function(){var def={displacement_score:1,own_building:1,dist_station_mi:1,land_value:1,income:1,own:1,college:1,sector_surv:1};SM_CAT.forEach(d=>{SM.inputs[d.k]=!!def[d.k];});})();
+(function(){SM_CAT.forEach(d=>{SM.inputs[d.k]=false;});})();
 function smSelFrom(obj){return SM_CAT.filter(d=>obj&&obj[d.k]).map(d=>d.k);}
 function smSelected(){return smSelFrom(SM.inputs);}
 function smActiveSel(){return smSelected();}
@@ -1912,7 +2257,7 @@ function smTableHTML(model){
   var head='<thead><tr>'+['Business','Sector','Disp. score','Pred. survival'].map((h,i)=>'<th style="text-align:'+(i>=2?'right':'left')+';padding:5px 8px;border-bottom:1px solid #e5e9f0;color:#5b6675;font-weight:600;white-space:nowrap">'+h+'</th>').join('')+'</tr></thead>';
   return '<table style="border-collapse:collapse;font-size:12px;width:100%">'+head+'<tbody>'+
     '<tr><td colspan="4" style="padding:5px 8px;background:#f4faf6;color:#127a4b;font-weight:600">Most likely to survive</td></tr>'+rowsHtml(top)+
-    '<tr><td colspan="4" style="padding:5px 8px;background:#fcf3f5;color:#b3203a;font-weight:600">Most at risk</td></tr>'+rowsHtml(bot)+
+    '<tr><td colspan="4" style="padding:5px 8px;background:#fcf3f5;color:#b3203a;font-weight:600">Least likely to survive</td></tr>'+rowsHtml(bot)+
     '</tbody></table>';
 }
 function smNoteText(model,teM){
@@ -1964,7 +2309,7 @@ function smNpaTable(agg,mode,hideActual){
     '<td style="text-align:right;padding:2px 6px;border-bottom:1px solid #f4f6f9;font-weight:600;color:'+rateColor(r.pred)+'">'+Math.round(r.pred*100)+'%</td>'+
     (hideActual?'':'<td style="text-align:right;padding:2px 6px;border-bottom:1px solid #f4f6f9;color:'+rateColor(r.surv)+'">'+Math.round(r.surv*100)+'%</td>')+'</tr>').join('')+'</table>';
 }
-function drawRailLines(map){try{if(!window.LINESG||!window.L)return;L.geoJSON(window.LINESG,{style:function(f){var ln=f.properties.line,planned=(ln==='red');return {color:LINEHEX[ln]||'#888',weight:planned?4:3,opacity:.8,dashArray:(f.properties.dash||planned)?'7,6':null};}}).addTo(map);if(window.RED_STATIONS)window.RED_STATIONS.forEach(function(st){L.circleMarker([st.lat,st.lon],{radius:5,color:'#fff',weight:2,fillColor:'#b3203a',fillOpacity:1}).bindTooltip('Red Line station: '+st.name).addTo(map);});}catch(e){}}
+function drawRailLines(map){try{if(!window.LINESG||!window.L)return;L.geoJSON(window.LINESG,{style:function(f){var ln=f.properties.line,planned=(ln==='red');return {color:LINEHEX[ln]||'#888',weight:planned?4:3,opacity:.8,dashArray:(f.properties.dash||planned)?'7,6':null};}}).addTo(map);if(window.RED_STATIONS)window.RED_STATIONS.forEach(function(st){L.circleMarker([st.mlat||st.lat,st.mlon||st.lon],{radius:5,color:'#fff',weight:2,fillColor:'#b3203a',fillOpacity:1}).bindTooltip('Planned Red Line station: '+st.name).addTo(map);});}catch(e){}}
 function makeBizMap(divId,scored,mode,onpick){
   var el=document.getElementById(divId);if(!el||!window.L)return null;
   var map;try{map=L.map(divId,{center:[35.42,-80.83],zoom:11,zoomControl:false,attributionControl:false,preferredCanvas:true});}catch(e){return null;}
@@ -1987,14 +2332,14 @@ function drawSurvMaps(model){
   var R=window.RL2,mode=_smMapMode||'pred';
   var scoredT=R.train.map(r=>({r:r,p:model.prob(r)})),scoredR=R.test.map(r=>({r:r,p:model.prob(r)}));
   requestAnimationFrame(function(){var mt=makeBizMap('smMapTrain',scoredT,mode);if(mt)_smMaps.push(mt);var mr=makeBizMap('smMapRed',scoredR,'pred');if(mr)_smMaps.push(mr);});
-  var lg=document.getElementById('smMapLegend');if(lg)lg.innerHTML='Each dot is one business. '+(document.getElementById('smMapTrain')&&mode==='actual'?'<span style="color:#127a4b">■</span> still Active, <span style="color:rgb(179,32,58)">■</span> Deleted.':'Color = model-predicted survival: <span style="color:rgb(179,32,58)">■</span> low → <span style="color:rgb(18,122,75)">■</span> high.')+' Positions are placed within each business’s neighborhood.';
+  var lg=document.getElementById('smMapLegend');if(lg)lg.innerHTML='<b>Metric:</b> '+(document.getElementById('smMapTrain')&&mode==='actual'?'each business’s <b>actual status</b> — <span style="color:#127a4b">■</span> Active (stayed open), <span style="color:rgb(179,32,58)">■</span> Deleted (closed).':'<b>predicted chance a business stays Active</b>, on a 0–100% scale — <span style="color:rgb(179,32,58)">■</span> low (likely to close) → <span style="color:rgb(18,122,75)">■</span> high (likely to stay open).')+' Each dot is one business, placed within its neighborhood.';
   var tt=document.getElementById('smTblTrain');if(tt)tt.innerHTML=smNpaTable(smNpaAgg(R.train,model),mode,false);
   var trd=document.getElementById('smTblRed');if(trd)trd.innerHTML=smNpaTable(smNpaAgg(R.test,model),'pred',true);
 }
 function smCoefNote(model){
   var pairs=model.keys.map((k,j)=>[k,model.w[j]]).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
   var top=pairs.slice(0,3).map(p=>smLabel(p[0])+' ('+(p[1]>=0?'+':'')+p[1].toFixed(2)+')').join(', ');
-  return 'Strongest signals: '+top+'. A positive weight raises the chance a business stays active; negative lowers it. Explore these pairwise in Correlations → Survival inputs.';
+  return 'Strongest signals: '+top+'. A positive weight raises the chance a business stays active; negative lowers it. Explore these pairwise in Correlations (business level).';
 }
 VIEWS.survival1=function(){
   var m=document.getElementById('main');
@@ -2003,8 +2348,8 @@ VIEWS.survival1=function(){
   var model=sel.length?smTrain():null,trM=model?smMetrics(model,R.train):null;
   var chips=SM_CATS.map(function(cat){var items=SM_CAT.filter(d=>d.cat===cat);if(!items.length)return '';return '<div class="small mut" style="margin:10px 0 2px;font-weight:600;color:#334155">'+cat+'</div><div class="chips" style="margin:0">'+items.map(d=>'<span class="chip '+(SM.inputs[d.k]?'on':'')+'" data-si="'+d.k+'" title="'+esc(d.label)+'">'+esc(d.label)+(d.k==='displacement_score'?' ★':'')+'</span>').join('')+'</div>';}).join('');
   m.innerHTML='<div class="card">'+
-    '<div class="kick" style="color:var(--blue)">Reason · survival model · stage 1 of 2</div>'+
-    '<h2>Stage 1 — build the model on Blue + Silver</h2>'+
+    '<div class="kick" style="color:var(--blue)">Survival model · Stage 1 of 2</div>'+
+    '<h2>Stage 1 · Build the survival model</h2>'+
     '<p class="small mut">Learn what predicts whether a business stays <b>Active</b>, using the built corridors only: <b>Blue + Silver</b> ('+R.train.length.toLocaleString()+' businesses). Pick inputs and read which ones matter. The City <b>displacement score ★</b> is just one input you can include or drop. The honest test comes in Stage 2 on the Red Line.</p>'+
     '<div class="small mut" style="margin:8px 0 4px">Pick inputs (the model retrains instantly):</div>'+
     chips+
@@ -2015,12 +2360,13 @@ VIEWS.survival1=function(){
         _kpi('Inputs used',sel.length,'of '+SM_CAT.length)+
       '</div>'+
       '<div class="small mut" style="margin-bottom:4px">How each input pushes survival (standardized weight):</div>'+
+      '<div class="row" style="justify-content:flex-end;margin:4px 0 0"><button class="btn ghost sm" onclick="downloadCanvas(\'smCoef\',\'stage1-factors.png\')">⬇ Download PNG</button></div>'+
       '<div class="chartwrap" style="height:'+Math.max(140,sel.length*26+50)+'px"><canvas id="smCoef"></canvas></div>'+
       '<div class="note" id="smNote" style="margin-top:12px"></div>'+
-      '<div style="margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>Blue + Silver neighborhoods</b><span class="chip" data-mm="pred">Predicted survival</span><span class="chip" data-mm="actual">Actual survival</span></div>'+
-      '<div style="margin-top:8px"><div id="smMapTrain" style="height:560px;border:1px solid #e5e9f0;border-radius:10px;background:#eef2f7"></div><div id="smMapLegend" class="small mut" style="margin-top:6px"></div><div id="smTblTrain" style="margin-top:8px;max-height:220px;overflow:auto"></div></div>'+
+      '<div style="margin-top:18px;display:flex;align-items:center;gap:8px;flex-wrap:wrap"><b>Blue + Silver neighborhoods</b><span class="chip" data-mm="pred">Predicted survival</span><span class="chip" data-mm="actual">Actual survival</span><button class="btn ghost sm" style="margin-left:auto" onclick="downloadSurvMap(\'train\')">⬇ Map (PNG)</button></div>'+
+      '<div style="margin-top:8px"><div id="smMapTrain" style="height:560px;border:1px solid #e5e9f0;border-radius:10px;background:#eef2f7"></div><div id="smMapLegend" class="small mut" style="margin-top:6px"></div><div class="row" style="justify-content:flex-end;margin-top:8px">'+dlT('smTblTrain','blue_silver_neighborhoods')+'</div><div id="smTblTrain" style="margin-top:4px;max-height:220px;overflow:auto"></div></div>'+
       '<div style="margin-top:12px" id="smClip"></div>'+
-      '<div class="row" style="margin-top:12px"><button class="btn" onclick="go(\'survival3\')">Stage 2: apply it to the Red Line →</button></div>'
+      '<div class="row" style="margin-top:12px"><button class="btn" onclick="go(\'survival3\')">Stage 2 · Apply to the Red Line →</button></div>'
     ):'<div class="note" style="margin-top:14px">Select at least one input to train the model.</div>')+
   '</div>';
   document.querySelectorAll('[data-si]').forEach(c=>c.onclick=function(){SM.inputs[this.dataset.si]=!SM.inputs[this.dataset.si];VIEWS.survival1();});
@@ -2034,7 +2380,7 @@ VIEWS.survival2=function(){go('survival3');};
 function smResetMod2(){SM.mod2={};VIEWS_survival3();}
 VIEWS.survival=function(){go('survival1');};
 /* ===================== RED LINE PREDICTION EXPLORER ===================== */
-let _ex={npa:'',biz:'',sector:'',band:'',sort:'risk',q:'',shortOnly:false,adjOpen:false};var _exFocus=0;var EX={};
+let _ex={npa:'',biz:'',sector:'',band:'',sort:'survlow',q:'',shortOnly:false,adjOpen:false};var _exFocus=0;var EX={};
 var _exMap=null;
 const _exProps={};
 (function(){try{if(window.NPAS&&NPAS.features)NPAS.features.forEach(f=>{_exProps[f.properties.id]=f.properties;});}catch(e){}})();
@@ -2063,7 +2409,7 @@ function exMean(rows,idx){var s=0,n=0;rows.forEach(r=>{var v=r[idx];if(v!=null&&
 function exSd(rows,idx){var m=exMean(rows,idx);if(m==null)return 1;var s=0,n=0;rows.forEach(r=>{var v=r[idx];if(v!=null&&!isNaN(v)){s+=(v-m)*(v-m);n++;}});return n?Math.sqrt(s/n)||1:1;}
 function exDemMean(biz,key){var s=0,n=0;biz.forEach(o=>{var p=_exProps[o.r[smIdx('npa')]];if(p&&p[key]!=null&&!isNaN(p[key])){s+=+p[key];n++;}});return n?s/n:null;}
 function exSectorMix(biz){var c={},t=0;biz.forEach(o=>{var sec=o.r[smIdx('sector')]||'Unknown';c[sec]=(c[sec]||0)+1;t++;});return Object.keys(c).map(k=>[k,c[k],100*c[k]/t]).sort((a,b)=>b[1]-a[1]);}
-function exBand(p){if(p<0.35)return{k:'high',label:'High risk',color:_grad(0.12)};if(p<0.5)return{k:'atrisk',label:'At risk',color:_grad(0.38)};if(p<0.65)return{k:'lean',label:'Leaning safe',color:_grad(0.6)};return{k:'safe',label:'Likely safe',color:_grad(0.85)};}
+function exBand(p){if(p<0.35)return{k:'low',label:'Unlikely to survive',color:_grad(0.12)};if(p<0.5)return{k:'lomid',label:'Leans toward closing',color:_grad(0.38)};if(p<0.65)return{k:'himid',label:'Leans toward surviving',color:_grad(0.6)};return{k:'high',label:'Likely to survive',color:_grad(0.85)};}
 function exEnsure(){var sig=smSelected().join(',')+'|'+JSON.stringify(SM.mod2||{});if(EX._sig!==sig||!EX._scored){EX._model=smModel();EX._scored=window.RL2.test.map(function(r){return {r:r,p:EX._model.prob(r),id:r[smIdx('business_id')],sector:r[smIdx('sector')],npa:r[smIdx('npa')]};});EX._sig=sig;}return EX;}
 function exFiltered(scored){
   var q=(_ex.q||'').toLowerCase();
@@ -2074,13 +2420,13 @@ function exFiltered(scored){
     if(_ex.shortOnly&&S.shortlist.indexOf(o.id)<0)return false;
     if(q&&!((''+o.id).toLowerCase().indexOf(q)>=0||(''+o.sector).toLowerCase().indexOf(q)>=0||smTown(o.npa).toLowerCase().indexOf(q)>=0))return false;
     return true;});
-  f.sort(_ex.sort==='riskdesc'?function(a,b){return b.p-a.p;}:_ex.sort==='name'?function(a,b){return (''+a.id<''+b.id)?-1:1;}:function(a,b){return a.p-b.p;});
+  f.sort(_ex.sort==='survhigh'?function(a,b){return b.p-a.p;}:_ex.sort==='name'?function(a,b){return (''+a.id<''+b.id)?-1:1;}:function(a,b){return a.p-b.p;});
   return f;
 }
 function exContribDet(o,model){var r=o.r;return model.keys.map(function(k,j){var raw=smVal(r,k);var val=(raw==null||isNaN(raw))?model.means[j]:raw;var z=(val-model.means[j])/(model.sd[j]||1);return {key:k,raw:raw,z:z,c:model.w[j]*z};});}
 function exStripHTML(scored){
-  var bands=[['high','High risk',_grad(0.12)],['atrisk','At risk',_grad(0.38)],['lean','Leaning safe',_grad(0.6)],['safe','Likely safe',_grad(0.85)]];
-  var cnt={high:0,atrisk:0,lean:0,safe:0};scored.forEach(function(o){cnt[exBand(o.p).k]++;});
+  var bands=[['low','Unlikely to survive',_grad(0.12)],['lomid','Leans toward closing',_grad(0.38)],['himid','Leans toward surviving',_grad(0.6)],['high','Likely to survive',_grad(0.85)]];
+  var cnt={low:0,lomid:0,himid:0,high:0};scored.forEach(function(o){cnt[exBand(o.p).k]++;});
   return '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0">'+bands.map(function(b){var on=_ex.band===b[0];return '<div data-band="'+b[0]+'" style="cursor:pointer;border:1px solid '+(on?b[2]:'#e5e9f0')+';background:'+(on?b[2]+'14':'#fff')+';border-radius:10px;padding:8px 10px"><div style="font-size:22px;font-weight:800;color:'+b[2]+'">'+cnt[b[0]]+'</div><div style="font-size:11px;color:#5b6675;font-weight:600">'+b[1]+'</div><div style="font-size:10px;color:#94a3b8">'+Math.round(100*cnt[b[0]]/scored.length)+'% of corridor</div></div>';}).join('')+'</div>';
 }
 function exList(filtered,selId){
@@ -2091,7 +2437,7 @@ function exList(filtered,selId){
       '<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+o.id+' <span style="color:#94a3b8;font-weight:400">'+esc(o.sector)+'</span></div><div style="font-size:11px;color:#7a8694">'+esc(smTown(o.npa))+'</div></div>'+
       '<div style="width:84px;text-align:right"><div style="font-weight:700;font-size:13px;color:'+rc+'">'+pct+'%</div><div style="height:5px;border-radius:3px;background:#eef2f7;margin-top:2px;overflow:hidden"><div style="height:5px;width:'+pct+'%;background:'+rc+'"></div></div></div>'+
     '</div>';}).join('');
-  return '<div style="font-size:11px;color:#7a8694;padding:6px 8px;border-bottom:1px solid #e5e9f0;background:#f8fafc">Showing '+cap+' of '+filtered.length.toLocaleString()+' · sorted '+(_ex.sort==='riskdesc'?'safest first':_ex.sort==='name'?'by ID':'most at-risk first')+'</div>'+rows+(filtered.length>cap?'<div style="font-size:11px;color:#94a3b8;padding:8px;text-align:center">Refine filters to see the rest</div>':'');
+  return '<div style="font-size:11px;color:#7a8694;padding:6px 8px;border-bottom:1px solid #e5e9f0;background:#f8fafc">Showing '+cap+' of '+filtered.length.toLocaleString()+' · sorted by '+(_ex.sort==='survhigh'?'highest predicted survival rate':_ex.sort==='name'?'business ID':'lowest predicted survival rate')+'</div>'+rows+(filtered.length>cap?'<div style="font-size:11px;color:#94a3b8;padding:8px;text-align:center">Refine filters to see the rest</div>':'');
 }
 function exDetail(o,model,scored){
   var r=o.r,b=exBand(o.p),pct=Math.round(o.p*100);
@@ -2101,7 +2447,7 @@ function exDetail(o,model,scored){
   function facRow(c){var cmp=c.z>0.4?'higher than typical':c.z<-0.4?'lower than typical':'about typical';var cc=c.z>0.4?'#b45309':c.z<-0.4?'#0369a1':'#94a3b8';
     return '<div style="display:flex;justify-content:space-between;gap:8px;padding:4px 0;border-bottom:1px solid #f4f6f9;font-size:12px"><div>'+esc(smLabel(c.key))+'<div style="font-size:10px;color:'+cc+'">'+cmp+'</div></div><div style="text-align:right;font-weight:600;white-space:nowrap">'+smFmt(c.key,c.raw)+'</div></div>';}
   var avg=scored.reduce(function(s,x){return s+x.p;},0)/scored.length, avgPct=Math.round(avg*100);
-  var verdict=pct>=65?'relatively safe':(pct>=50?'leaning safe':pct>=35?'at risk':'high risk');
+  var verdict=b.label;
   var rel=o.p>=avg?('above the Red Line average of '+avgPct+'%'):('below the Red Line average of '+avgPct+'%');
   var p=_exProps[o.npa];
   var snap=p?[['income','Median income','money'],['own','Homeownership','pct'],['rent','Median rent','money'],['college','Degree holders','pct']].map(function(d){return '<span style="display:inline-block;margin:2px 10px 2px 0"><span class="mut">'+d[1]+':</span> <b>'+exFmtDem(d[2],p[d[0]])+'</b></span>';}).join(''):'';
@@ -2110,7 +2456,7 @@ function exDetail(o,model,scored){
     '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap"><div><div style="font-size:18px;font-weight:800">'+o.id+'</div><div class="small mut">'+esc(o.sector)+' · '+esc(smTown(o.npa))+' (NPA '+o.npa+')</div></div>'+
     '<div style="text-align:right"><div style="font-size:30px;font-weight:800;color:'+rateColor(o.p)+';line-height:1">'+pct+'%</div><div style="font-size:11px;font-weight:600;color:'+rateColor(o.p)+'">'+b.label+'</div></div></div>'+
     '<div style="height:12px;border-radius:7px;background:linear-gradient(90deg,rgb(179,32,58),rgb(242,201,76),rgb(18,122,75));position:relative;margin:12px 0 6px"><div style="position:absolute;left:calc('+pct+'% - 2px);top:-3px;width:4px;height:18px;background:#16202c;border-radius:2px"></div></div>'+
-    '<div class="small mut" style="margin-bottom:10px">Predicted <b>'+pct+'%</b> likely to stay active — <b style="color:'+b.color+'">'+verdict+'</b>, '+rel+'.</div>'+
+    '<div class="small mut" style="margin-bottom:10px">Predicted survival rate: <b>'+pct+'%</b> — <b style="color:'+b.color+'">'+verdict+'</b> ('+rel+').</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">'+
       '<div><div style="font-weight:700;color:#127a4b;font-size:13px;margin-bottom:2px">▲ Holding it up</div>'+(ups.length?ups.map(facRow).join(''):'<div class="small mut">nothing notable</div>')+'</div>'+
       '<div><div style="font-weight:700;color:#b3203a;font-size:13px;margin-bottom:2px">▼ Pulling it down</div>'+(downs.length?downs.map(facRow).join(''):'<div class="small mut">nothing notable</div>')+'</div>'+
@@ -2131,7 +2477,7 @@ function exSummaryText(o,model,scored){
 }
 function toggleShort(id){var i=S.shortlist.indexOf(id);if(i>=0)S.shortlist.splice(i,1);else S.shortlist.push(id);save();VIEWS_survival3();}
 function exCopyBiz(id){var e=exEnsure();var o=e._scored.find(function(x){return x.id===id;});if(!o)return;var t=exSummaryText(o,e._model,e._scored);try{navigator.clipboard.writeText(t);toast('Summary copied');}catch(err){toast('Copy not available');}}
-function exExportShortlist(){if(!S.shortlist.length){toast('Shortlist is empty — star some businesses first');return;}var e=exEnsure();var byId={};e._scored.forEach(function(o){byId[o.id]=o;});var rows=[['business_id','sector','neighborhood','npa','predicted_survival_pct','risk_band','top_risk_factors']];S.shortlist.forEach(function(id){var o=byId[id];if(!o)return;var d=exContribDet(o,e._model).filter(function(c){return c.c<0;}).sort(function(a,b){return a.c-b.c;}).slice(0,3).map(function(c){return smLabel(c.key);});rows.push([id,o.sector,smTown(o.npa),o.npa,Math.round(o.p*100),exBand(o.p).label,d.join('; ')]);});var csv=rows.map(function(r){return r.map(function(c){c=''+c;return c.indexOf(',')>=0||c.indexOf('"')>=0?'"'+c.replace(/"/g,'""')+'"':c;}).join(',');}).join('\n');download('red_line_shortlist.csv',csv);toast(S.shortlist.length+' businesses exported');}
+function exExportShortlist(){if(!S.shortlist.length){toast('Shortlist is empty — star some businesses first');return;}var e=exEnsure();var byId={};e._scored.forEach(function(o){byId[o.id]=o;});var rows=[['business_id','sector','neighborhood','npa','predicted_survival_pct','survival_band','factors_lowering_survival']];S.shortlist.forEach(function(id){var o=byId[id];if(!o)return;var d=exContribDet(o,e._model).filter(function(c){return c.c<0;}).sort(function(a,b){return a.c-b.c;}).slice(0,3).map(function(c){return smLabel(c.key);});rows.push([id,o.sector,smTown(o.npa),o.npa,Math.round(o.p*100),exBand(o.p).label,d.join('; ')]);});var csv=rows.map(function(r){return r.map(function(c){c=''+c;return c.indexOf(',')>=0||c.indexOf('"')>=0?'"'+c.replace(/"/g,'""')+'"':c;}).join(',');}).join('\n');download('red_line_shortlist.csv',csv);toast(S.shortlist.length+' businesses exported');}
 function exSelectBiz(id){
   _ex.biz=id;var o=EX._scored?EX._scored.find(function(x){return x.id===id;}):null;
   var dw=document.getElementById('exDetailWrap');if(dw&&o)dw.innerHTML=exDetail(o,EX._model,EX._scored);
@@ -2159,7 +2505,7 @@ function exDrawMap(filtered,selId){
 }
 function exDataTable(filtered,model){
   var keys=model.keys,cap=Math.min(filtered.length,300);
-  var head=['Business','Sector','Neighborhood','Survival'].concat(keys.map(smLabel));
+  var head=['Business','Sector','Neighborhood','Predicted survival rate'].concat(keys.map(smLabel));
   var thead='<tr>'+head.map(function(h,i){return '<th style="position:sticky;top:0;background:#fff;text-align:'+(i>=3?'right':'left')+';padding:5px 8px;border-bottom:1px solid #e5e9f0;color:#5b6675;font-weight:600;white-space:nowrap">'+esc(h)+'</th>';}).join('')+'</tr>';
   var rows=filtered.slice(0,cap).map(function(o){var pct=Math.round(o.p*100),col=rateColor(o.p),on=o.id===_ex.biz;
     return '<tr class="exdrow" data-bid="'+o.id+'" style="cursor:pointer;background:'+(on?'#eef5ff':'#fff')+'">'+
@@ -2171,11 +2517,19 @@ function exDataTable(filtered,model){
     '</tr>';}).join('');
   return '<div style="overflow:auto;max-height:420px;border:1px solid #e5e9f0;border-radius:11px"><table style="border-collapse:collapse;font-size:11px;width:100%"><thead>'+thead+'</thead><tbody>'+rows+'</tbody></table></div>';
 }
+function exDownloadTable(){
+  var e=exEnsure();var filtered=exFiltered(e._scored);var model=e._model;
+  var head=['business_id','sector','neighborhood','npa','predicted_survival_rate_pct'].concat(model.keys.map(smLabel));
+  var rows=[head];
+  filtered.forEach(function(o){var row=[o.id,o.sector,smTown(o.npa),o.npa,Math.round(o.p*100)];model.keys.forEach(function(k){row.push(smFmt(k,smVal(o.r,k)));});rows.push(row);});
+  var csv=rows.map(function(r){return r.map(function(c){c=''+(c==null?'':c);return (c.indexOf(',')>=0||c.indexOf('"')>=0||c.indexOf('\n')>=0)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',');}).join('\n');
+  download('red_line_business_data.csv',csv);toast('Business data downloaded ('+filtered.length+' rows)');
+}
 function VIEWS_survival3(){
   var m=document.getElementById('main');
   if(!window.RL2){m.innerHTML='<div class="card"><h2>Explore the Red Line</h2><p class="note">Business dataset not loaded. Reload from disk.</p></div>';return;}
   if(!S.shortlist)S.shortlist=[];
-  if(!smActiveSel().length){m.innerHTML='<div class="card"><div class="kick" style="color:var(--blue)">Reason · explore predictions</div><h2>Explore the Red Line predictions</h2><div class="warnbox" style="margin-top:10px">No model yet. Build one in <b>Stage 1</b> first.</div><div class="row" style="margin-top:12px"><button class="btn" onclick="go(\'survival1\')">← Go to Stage 1</button></div></div>';return;}
+  if(!smActiveSel().length){m.innerHTML='<div class="card"><div class="kick" style="color:var(--blue)">Survival model · Stage 2 of 2</div><h2>Stage 2 · Apply to the Red Line</h2><div class="warnbox" style="margin-top:10px">No model yet. Build one in <b>Stage 1</b> first.</div><div class="row" style="margin-top:12px"><button class="btn" onclick="go(\'survival1\')">← Go to Stage 1</button></div></div>';return;}
   var e=exEnsure(),scored=e._scored,model=e._model;
   var sectors=Array.from(new Set(scored.map(function(o){return o.sector;}))).sort();
   var npas=Array.from(new Set(scored.map(function(o){return o.npa;}))).sort(function(a,b){return a-b;});
@@ -2189,24 +2543,25 @@ function VIEWS_survival3(){
   var _sliders=_akeys.map(function(k){var v=(SM.mod2&&SM.mod2[k]!=null?SM.mod2[k]:1);return '<div style="display:flex;align-items:center;gap:10px;margin:5px 0"><div style="width:210px;font-size:12px;color:#334155">'+esc(smLabel(k))+'</div><input type="range" min="0" max="2" step="0.1" value="'+v+'" data-mw="'+k+'" style="flex:1;accent-color:#1f6feb"><div style="width:42px;text-align:right;font-size:12px;font-weight:700" id="mwv_'+k+'">'+v.toFixed(1)+'×</div></div>';}).join('');
   var _adj='<details '+(_ex.adjOpen?'open':'')+' id="exAdj" style="margin:10px 0;border:1px solid #e5e9f0;border-radius:11px;padding:8px 12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Adjust factor influence — forecast '+_modPct+'% survive vs '+_refPct+'% Stage 1 reference'+(_nadj?' · '+_nadj+' changed':'')+'</summary><div class="small mut" style="margin:6px 0">Dial each Stage 1 factor up or down (1.0× = your Stage 1 model). The map, list and rankings update live.</div>'+_sliders+'<div class="row" style="margin-top:8px"><button class="btn sec sm" onclick="smResetMod2()">Reset to 1.0×</button></div></details>';
   m.innerHTML='<div class="card">'+
-    '<div class="kick" style="color:var(--blue)">Reason · apply &amp; explore · stage 2 of 2</div>'+
-    '<h2>Red Line risk explorer</h2>'+
-    '<p class="small mut">A working list of every planned Red Line business, scored by your model. Filter by risk band, sector or neighborhood, click any business to see why, and <b>star the ones that matter</b> to build a shortlist you can export.</p>'+
+    '<div class="kick" style="color:var(--blue)">Survival model · Stage 2 of 2</div>'+
+    '<h2>Stage 2 · Apply to the Red Line</h2>'+
+    '<p class="small mut">A working list of every planned Red Line business, each with a <b>predicted survival rate</b> from your model. Sort by predicted survival rate, filter by sector or neighborhood, click any business to see why, and <b>star the ones that matter</b> to build a shortlist you can export.</p>'+
     _adj+
     exStripHTML(scored)+
     '<div class="row" style="gap:8px;align-items:center;flex-wrap:wrap">'+
       '<select id="exSector"><option value="">All sectors</option>'+sectors.map(function(s){return '<option value="'+esc(s)+'" '+(_ex.sector===s?'selected':'')+'>'+esc(s)+'</option>';}).join('')+'</select>'+
       '<select id="exNpaF"><option value="">All neighborhoods</option>'+npas.map(function(n){return '<option value="'+n+'" '+(String(_ex.npa)===String(n)?'selected':'')+'>'+esc(smTown(n))+'</option>';}).join('')+'</select>'+
-      '<select id="exSort"><option value="risk" '+(_ex.sort==='risk'?'selected':'')+'>Most at-risk first</option><option value="riskdesc" '+(_ex.sort==='riskdesc'?'selected':'')+'>Safest first</option><option value="name" '+(_ex.sort==='name'?'selected':'')+'>By ID</option></select>'+
+      '<select id="exSort"><option value="survhigh" '+(_ex.sort==='survhigh'?'selected':'')+'>Highest predicted survival rate first</option><option value="survlow" '+(_ex.sort==='survlow'?'selected':'')+'>Lowest predicted survival rate first</option><option value="name" '+(_ex.sort==='name'?'selected':'')+'>By business ID</option></select>'+
       '<span class="chip '+(_ex.shortOnly?'on':'')+'" id="exShortOnly">★ Shortlist only</span>'+
     '</div>'+
-    '<div id="exMap" style="height:560px;border:1px solid #e5e9f0;border-radius:11px;margin-top:12px;background:#eef2f7"></div>'+
-    '<div class="small mut" style="margin-top:4px">Each dot is a business colored by risk; faint outlines are neighborhoods. Click a dot or a row to inspect it. Positions are placed within each business’s neighborhood (the data has no street addresses).</div>'+
+    '<div class="row" style="justify-content:flex-end;margin-top:12px"><button class="btn ghost sm" onclick="downloadExMap()">⬇ Map (PNG)</button></div>'+
+    '<div id="exMap" style="height:560px;border:1px solid #e5e9f0;border-radius:11px;margin-top:6px;background:#eef2f7"></div>'+
+    '<div class="small mut" style="margin-top:4px">Each dot is a business colored by its <b>predicted survival rate</b> (red = low rate, likely to close; green = high rate, likely to stay open); faint outlines are neighborhoods. Click a dot or a row to inspect it. Positions are placed within each business’s neighborhood (the data has no street addresses).</div>'+
     '<div style="display:grid;grid-template-columns:minmax(280px,1fr) minmax(320px,1.4fr);gap:16px;margin-top:12px;align-items:start">'+
-      '<div id="exListWrap" style="border:1px solid #e5e9f0;border-radius:11px;overflow:auto;max-height:520px">'+exList(filtered,selected?selected.id:'')+'</div>'+
-      '<div id="exDetailWrap">'+(selected?exDetail(selected,model,scored):'<div class="note">No businesses match these filters.</div>')+'</div>'+
+      '<div><div style="font-weight:700;font-size:13px;margin-bottom:6px">Survival rates by business</div><div id="exListWrap" style="border:1px solid #e5e9f0;border-radius:11px;overflow:auto;max-height:520px">'+exList(filtered,selected?selected.id:'')+'</div></div>'+
+      '<div><div style="font-weight:700;font-size:13px;margin-bottom:6px">Detailed business data (individual)</div><div id="exDetailWrap">'+(selected?exDetail(selected,model,scored):'<div class="note">No businesses match these filters.</div>')+'</div></div>'+
     '</div>'+
-    '<div style="margin-top:18px"><b>Business data</b> <span class="small mut">(filtered, survival cell shaded on a red-to-green risk gradient — click a row to inspect)</span></div>'+
+    '<div class="spread" style="margin-top:18px;align-items:flex-end"><div><b>Detailed business data (all filtered businesses)</b> <span class="small mut">— the predicted-survival-rate cell is shaded red (low) to green (high); click a row to inspect</span></div><button class="btn ghost sm" onclick="exDownloadTable()">⬇ Download (CSV)</button></div>'+
     '<div style="margin-top:6px">'+exDataTable(filtered,model)+'</div>'+
     '<div class="spread" style="margin-top:14px;padding-top:12px;border-top:1px solid #f1f4f8"><div class="small mut"><b>'+S.shortlist.length+'</b> business'+(S.shortlist.length===1?'':'es')+' on your shortlist</div><button class="btn" onclick="exExportShortlist()">⬇ Export shortlist (CSV)</button></div>'+
   '</div>';
@@ -2228,7 +2583,8 @@ function exPickBiz(id){_ex.biz=id;VIEWS_survival3();}
 function exClipText(scored){
   var surv=scored.filter(o=>o.p>=0.5).length;
   if(_ex.npa){var id=+_ex.npa,biz=scored.filter(o=>o.r[smIdx('npa')]===id);return 'Red Line explorer — '+smTown(id)+': '+biz.length+' businesses, '+Math.round(100*biz.filter(o=>o.p>=0.5).length/biz.length)+'% predicted to survive.';}
-  return 'Red Line explorer: of '+scored.length+' businesses, '+Math.round(100*surv/scored.length)+'% predicted to survive; explore which business and neighborhood traits separate survivors from at-risk.';
+  return 'Red Line explorer: of '+scored.length+' businesses, '+Math.round(100*surv/scored.length)+'% predicted to survive; explore which business and neighborhood traits separate the survivors from those likely to close.';
 }
 VIEWS.survival3=VIEWS_survival3;
+/* build: survival-canonical + data-dictionary measures + tasks nav (2026-06) */
 boot();
