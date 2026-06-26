@@ -1638,7 +1638,7 @@ function fbSubmit(){
 // submission to your Google Sheet. Leave empty to fall back to a downloadable file.
 const ORGANIZER_EMAIL='vgude@elon.edu';
 // Paste your Google Apps Script Web App URL between the quotes to save results + feedback to your Google Sheet.
-const SUBMIT_URL='';
+const SUBMIT_URL='https://script.google.com/macros/s/AKfycbzinGHjwmyQWAePss3PJLrVL9uGcqn6MOiwqcn2CYzQ3f5COoAWqH6lQy6qfA9JNEEk/exec';
 function smResultsModel(){if(!(window.RL2&&typeof smSelected==='function'&&smSelected().length))return null;
   var mm=smTrain(),te=smMetrics(mm,window.RL2.test);
   return {inputs:smSelected().map(smLabel),redAccuracy:+(te.acc*100).toFixed(1),baseline:+(te.base*100).toFixed(1),auc:+te.auc.toFixed(3)};}
