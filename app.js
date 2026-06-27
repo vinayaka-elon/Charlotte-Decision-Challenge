@@ -12,6 +12,8 @@ if(!D){ document.getElementById('main').innerHTML =
 const NPAI={}; D.npaCols.forEach((c,i)=>NPAI[c]=i);
 const BZI={};  D.bizCols.forEach((c,i)=>BZI[c]=i);
 const CUR = D.meta.currentYear;
+// The City's neighborhood displacement index lives in the data (npaCols 'disp') but was never in the catalog — register it so it shows up everywhere variables are listed.
+if(!D.catalog.some(c=>c.key==='disp')){D.catalog.push({key:'disp',title:'Neighborhood displacement index',level:'Neighborhood',category:'Housing',unit:'Index 0-5',prov:'city',leak:false});}
 const catByKey={}; D.catalog.forEach(c=>catByKey[c.key]=c);
 
 /* sector labels (NAICS groups, codes 0..7) */
@@ -268,32 +270,32 @@ function boot(){ if(!gateOK()){renderGate();return;} hideGate(); renderTeamChip(
 
 /* ---- Team login gate ---- */
 function validEmail(e){return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test((e||'').trim());}
-function gateOK(){return !!(S.team&&S.team.name&&validEmail(S.team.email));}
+function gateOK(){return !!(S.team&&S.team.name&&S.team.participants);}
 function hideGate(){var g=document.getElementById('gate');if(g){g.classList.add('hidden');g.innerHTML='';}}
 function renderTeamChip(){var c=document.getElementById('teamChip');if(!c)return;
-  if(gateOK()){c.style.display='';c.innerHTML='<b>'+esc(S.team.name)+'</b> <span class="mut" style="font-weight:400">'+esc(S.team.email)+'</span> <span style="cursor:pointer;margin-left:6px" title="Edit team" onclick="editTeam()">&#9998;</span>';}
+  if(gateOK()){c.style.display='';c.innerHTML='<b>'+esc(S.team.name)+'</b> <span class="mut" style="font-weight:400">'+esc(S.team.participants)+'</span> <span style="cursor:pointer;margin-left:6px" title="Edit team" onclick="editTeam()">&#9998;</span>';}
   else c.style.display='none';}
 function editTeam(){renderGate();}
 function gateMsg(m){var e=document.getElementById('gateErr');if(e)e.textContent=m;}
 function renderGate(){
   var g=document.getElementById('gate');if(!g)return;
-  var t=(S.team&&S.team.name)||'',e=(S.team&&S.team.email)||'';
+  var t=(S.team&&S.team.name)||'',p=(S.team&&S.team.participants)||'';
   g.innerHTML='<div class="gatebox">'+
     '<h2 style="margin:0 0 4px">Charlotte Decision Challenge</h2>'+
-    '<p class="small mut" style="margin:0 0 16px">Sign in with your team to begin. Your team name and email let us share your final results with you and the organizer.</p>'+
+    '<p class="small mut" style="margin:0 0 16px">Enter your team name and your own name to begin. Each teammate signs in on their own.</p>'+
     '<label class="gatelbl">Team name</label><input id="gateName" type="text" placeholder="e.g. The Transit Trackers" value="'+esc(t)+'">'+
-    '<label class="gatelbl">Team email</label><input id="gateEmail" type="email" placeholder="you@school.edu" value="'+esc(e)+'">'+
+    '<label class="gatelbl">Your name</label><input id="gateParts" type="text" placeholder="e.g. Alex" value="'+esc(p)+'">'+
     '<div id="gateErr" class="gateerr"></div>'+
     '<button class="btn" id="gateGo" style="width:100%;margin-top:6px">Start the challenge &rarr;</button>'+
-    '<p class="tiny mut" style="margin-top:10px">By starting, you agree your team name, email and final answers may be shared with the challenge organizer (vgude@elon.edu).</p>'+
+    '<p class="tiny mut" style="margin-top:10px">By starting, you agree your team name, your name and final answers may be shared with the challenge organizer (vgude@elon.edu).</p>'+
   '</div>';
   g.classList.remove('hidden');
-  function submit(){var n=document.getElementById('gateName').value.trim();var em=document.getElementById('gateEmail').value.trim();
+  function submit(){var n=document.getElementById('gateName').value.trim();var pp=document.getElementById('gateParts').value.trim();
     if(!n){gateMsg('Please enter your team name.');return;}
-    if(!validEmail(em)){gateMsg('Please enter a valid email address.');return;}
-    S.team={name:n,email:em,ts:Date.now()};save();hideGate();renderTeamChip();renderPins();renderRail();go(S.view||'brief');}
+    if(!pp){gateMsg('Please enter your name.');return;}
+    S.team={name:n,participants:pp,ts:Date.now()};save();hideGate();renderTeamChip();renderPins();renderRail();go(S.view||'brief');}
   document.getElementById('gateGo').onclick=submit;
-  document.getElementById('gateEmail').addEventListener('keydown',function(ev){if(ev.key==='Enter')submit();});
+  document.getElementById('gateParts').addEventListener('keydown',function(ev){if(ev.key==='Enter')submit();});
   var nm=document.getElementById('gateName');if(nm)nm.focus();
 }
 
@@ -410,25 +412,7 @@ VIEWS.brief=function(){
     </div>
   </div>
 
-  <div class="card">
-    <div class="kick">Your task list</div>
-    <h3 style="margin-top:2px">Work through the Tasks tab</h3>
-    <p class="small mut">The <b>Tasks</b> tab is your step-by-step checklist — each task sends you to the right tool and asks what you found. The tools are grouped in the sidebar like this:</p>
-    <div class="bars" style="margin-top:6px">
-      ${[['Investigate — explore the City of Charlotte data (Map, Chart, Correlations, Time machine, Dig in)','map'],
-         ['Stage 1 — build the survival model on the Blue + Silver corridors','survival1'],
-         ['Stage 2 — apply the model to the planned Red Line and find who needs support','survival3']
-       ].map(r=>`<div class="spread" style="padding:7px 0;border-bottom:1px solid var(--line2)">
-         <div><b style="font-weight:600">${r[0]}</b></div>
-         <button class="btn ghost sm" onclick="go('${r[1]}')">open</button></div>`).join('')}
-    </div>
-    <button class="btn" style="margin-top:12px" onclick="go('missions')">Open the Tasks list →</button>
-  </div>
-
-  <div class="card tight">
-    <div class="spread"><div class="small mut">Scope: Mecklenburg County. Learn on the Blue and Silver corridors, then apply to the Red Line.</div>
-    <button class="btn" onclick="go('missions')">See your tasks →</button></div>
-  </div>`;
+  `;
   document.getElementById('hypo').oninput=function(){S.hypothesis=this.value;save();};
 };
 
@@ -501,13 +485,15 @@ const _MEASURE_BY_KEY={
   'TEST PROF ELEMENTARY':['Percent','% of elementary students proficient on state tests'],
   'TEST PROF HIGH':['Percent','% of high-school students proficient on state tests'],
   'TEST PROF MIDDLE':['Percent','% of middle-school students proficient on state tests'],
-  'WATER CONS':['Average','water use per household (gallons)']
+  'WATER CONS':['Average','water use per household (gallons)'],
+  'disp':['Index','scale 0–5 (higher = more displacement pressure)']
 };
 function _measureFromUnit(u){
   var l=(u||'').toLowerCase();
   if(l==='%')return['Percent','% (share)'];
   if(l.indexOf('median')>=0)return['Median',u];
   if(l.indexOf('avg')>=0||l.indexOf('average')>=0)return['Average',u];
+  if(/index\s*1-?3/i.test(u))return['Index','scale 1–3 (1 = low, 2 = medium, 3 = high)'];
   if(l.indexOf('index')>=0)return['Index',u];
   if(l.indexOf('acre')>=0)return['Density',u];
   if(l.indexOf('/')>=0||l.indexOf(' per ')>=0)return['Rate',u];
@@ -546,7 +532,6 @@ VIEWS.guide=function(){
     <div class="kick">Field guide</div>
     <h2>Field guide &amp; data dictionary</h2>
     <p class="lede">What you are predicting is <b>business survival</b> — whether a business stayed open or closed. Every variable below is a possible <b>input</b> or piece of context for that question. For each one the table tells you <b>what statistic it is</b> (a count, a percentage, a median, a rate, and so on) and <b>its units</b>, so you always know what a number means before you use it.</p>
-    <div class="warnbox" style="background:#eef5ff;border-color:#cfe0ff;color:#1b3a6b;margin-top:10px"><b>Facilitator tip (10 min):</b> before anyone builds a model, have each team skim this dictionary and pick three variables they think will predict survival. It is a fast data-check that surfaces misunderstandings early.</div>
     <div class="row" style="margin-top:8px">
       <button class="btn ghost sm" onclick="document.getElementById('keyvars').scrollIntoView({behavior:'smooth'})">★ Key variables</button>
       <button class="btn ghost sm" onclick="document.getElementById('breaks').scrollIntoView({behavior:'smooth'})">Things that will fool you ⚠</button>
@@ -561,10 +546,9 @@ VIEWS.guide=function(){
   </div>
 
   <div class="card">
-    <h3 style="margin-bottom:6px">How to read the numbers</h3>
+    <h3 style="margin-bottom:6px">Abbreviations</h3>
     <div class="small mut" style="line-height:1.6">
-      <b>Indexes are scores, not counts.</b> The City <b>displacement index</b> runs <b>0 to 5</b> (higher = more displacement pressure). A few Quality-of-Life measures run <b>1 to 3</b> (1 = low, 2 = medium, 3 = high). An index of 0 or 1 is the low end of the scale, not a missing value.<br>
-      <b>Common abbreviations:</b> NPA = Neighborhood Profile Area · CBP = Census County Business Patterns (the business-count source) · QoL = Quality of Life survey · building-to-land = building value ÷ land value.
+      NPA = Neighborhood Profile Area · CBP = Census County Business Patterns (the business-count source) · QoL = Quality of Life survey · building-to-land = building value ÷ land value.
     </div>
   </div>
 
@@ -660,7 +644,7 @@ VIEWS.map=function(){
   const m=document.getElementById('main');
   m.innerHTML=`
   <div class="card">
-    <div class="kick" style="color:var(--blue)">Investigate · map studio</div>
+    <div class="kick" style="color:var(--blue)">Investigate · describe · map studio</div>
     <h2>Neighborhood map</h2>
     <p class="small mut">Shade all ${D.npa.length} Mecklenburg neighborhoods by a chosen variable, then use <b>Zoom to</b> to drop into any neighborhood on a line and read its profile.</p>
     <div class="row" style="margin:6px 0 2px">
@@ -780,7 +764,7 @@ VIEWS.chart=function(){
   const m=document.getElementById('main');
   m.innerHTML=`
   <div class="card">
-    <div class="kick" style="color:var(--blue)">Investigate · chart studio</div>
+    <div class="kick" style="color:var(--blue)">Investigate · describe · chart studio</div>
     <h2>Compare two measures</h2>
     <p class="small mut">Pick any two measures. Correlation is not cause: ask what a control would show, and whether a third factor drives both.</p>
     <div class="chips">
@@ -978,8 +962,9 @@ function exportPop(set){
 }
 function download(name,txt){const b=new Blob([txt],{type:'text/plain'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=name;document.body.appendChild(a);a.click();a.remove();}
 /* ---------------- TIME MACHINE (rebuilt 2026-06-16) ---------------- */
-let _tmChart=null,_tm='homeval';
+let _tmChart=null,_tmBreakChart=null,_tm='homeval';
 let _tmOverlay='';
+let _tmBreakMetric='demos';
 let _tmLines={blue:true,silver:true,gold:true,red:true};
 let _tmSector='retail';
 const TM_AREA_COLORS=['#1f6feb','#b3203a','#b08a2e','#127a4b','#6b4ea0','#0e8a8a','#c2570c','#6b7280','#d11d6b'];
@@ -1031,8 +1016,12 @@ const TM_SERIES={
       note:'Share of corridor businesses by sector. Retail trade falls steadily while real estate and food service rise, a replacement signal even when total counts look stable.',
       table:{head:['Year','Retail %','Real estate %','Finance %','Food %'],rows:labels.map((y,i)=>[y,mx.retail[i],mx.realestate[i],mx.finance[i],mx.food[i]])}};}},
   area:{label:'Sector by area',sub:'sectors',build(){const ma=window.MIXALL;if(!_has(ma))return _missing('MIXALL');const labels=ma.years;const sec=_tmSector;const keys=Object.keys(ma.areas);
-    return {labels,ds:keys.map((k,i)=>{const a=ma.areas[k];const isRed=(a.label||'').indexOf('Red')>=0;return {label:a.label,data:a[sec],borderColor:TM_AREA_COLORS[i%TM_AREA_COLORS.length],backgroundColor:'transparent',tension:.25,borderDash:isRed?[6,4]:[],borderWidth:2};}),
-      note:'Share of '+_secName(sec)+' businesses by corridor area, over time. Red Line areas are dashed. Compare how the sector moved in the built corridors against the Red Line areas.',
+    // High-level chart: average each sector share up to the transit line (Blue / Silver / Red). Station-by-station areas stay in the table only, to avoid clutter.
+    const groups={};keys.forEach(k=>{const ln=((ma.areas[k].label||'').split('·')[0]||'').trim()||'Other';(groups[ln]=groups[ln]||[]).push(k);});
+    const gOrder=['Blue','Silver','Gold','Red'].filter(g=>groups[g]).concat(Object.keys(groups).filter(g=>['Blue','Silver','Gold','Red'].indexOf(g)<0));
+    const ds=gOrder.map(g=>{const ks=groups[g];const isRed=g==='Red';return {label:g+' line',data:labels.map((_,i)=>{let s=0,c=0;ks.forEach(k=>{const v=ma.areas[k][sec][i];if(v!=null){s+=v;c++;}});return c?+(s/c).toFixed(2):null;}),borderColor:LINEHEX[g]||'#888',backgroundColor:'transparent',tension:.25,borderDash:isRed?[6,4]:[],borderWidth:2};});
+    return {labels,ds,
+      note:'Share of '+_secName(sec)+' businesses by transit line, averaged across each line’s areas. Red is dashed. The station-by-station detail for every area is in the table below.',
       table:{head:['Year',...keys.map(k=>ma.areas[k].label)],rows:labels.map((y,i)=>[y,...keys.map(k=>ma.areas[k][sec][i])])}};}},
   demos:{label:'Demolitions by line',sub:'lines',build(){const d=window.DEMOS;if(!_has(d))return _missing('DEMOS');const labels=d.years;const all=Object.keys(d.lines);const sel=all.filter(ln=>_tmLines[ln]);
     return {labels,ds:sel.map(ln=>({label:_cap(ln),data:d.lines[ln],borderColor:LINEHEX[ln]||'#888',backgroundColor:'transparent',tension:.25})),
@@ -1043,7 +1032,7 @@ const TM_SERIES={
       note:'Home sales near each corridor. The Red corridor has far more homes, so its raw counts dwarf the others. Rising sales often precede commercial change.',
       table:{head:['Year',...all.map(_cap)],rows:labels.map((y,i)=>[y,...all.map(ln=>hs.lines[ln][i])])}};}}
 };
-const TM_ORDER=['homeval','rent','rezone','corridor','teardown','mix','area','demos','sales'];
+const TM_ORDER=['homeval','rent','rezone','corridor','teardown','demos','sales'];
 VIEWS.time=function(){
   const m=document.getElementById('main');
   const need=['RLDATA','DEMOS','MIXSE','MIXALL','HOMESALES','HOMEVAL','RENT','REZONE'];
@@ -1051,37 +1040,70 @@ VIEWS.time=function(){
   const stamp=miss.length?`<span style="color:var(--warn)">data check: missing ${miss.join(', ')} (rl_geo.js is cached, reload from disk)</span>`:`<span style="color:#127a4b">data check: all ${need.length} series loaded</span>`;
   m.innerHTML=`
   <div class="card">
-    <div class="kick" style="color:var(--blue)">Investigate · time machine</div>
+    <div class="kick" style="color:var(--blue)">Investigate · describe · time machine</div>
     <h2>Change over time</h2>
-    <p class="small mut">Track how the Blue and Silver corridors changed over time — the lesson you carry to the Red Line. Pick a variable, then optionally <b>overlay a second one on the right axis</b> to compare two trends at different scales. A year marked <span style="color:var(--warn)">⚠</span> can be a recording change, not a real one. <span style="font-variant:all-small-caps">build tm-2026-06-16</span> · ${stamp}.</p>
-    <div class="small mut" style="margin-bottom:4px">Variable (left axis):</div>
+    <p class="small mut">Track how the built <b>Blue and Silver corridor</b> changed over time — the lesson you carry to the Red Line. Pick a variable for the <b>left axis</b> and optionally a second for the <b>right axis</b>; the top chart stays clean with just those one or two trends. The <b>breakdown by transit line</b> is below, with a static <b>sector-mix</b> table underneath. A year marked <span style="color:var(--warn)">⚠</span> can be a recording change, not a real one. ${stamp}.</p>
+    <div class="small mut" style="margin-bottom:4px">Left axis — pick a variable:</div>
     <div class="chips">${TM_ORDER.map(id=>`<span class="chip ${_tm===id?'on':''}" data-tm="${id}">${TM_SERIES[id].label}</span>`).join('')}</div>
-    <div id="tmLineChips" class="chips" style="margin-top:0"></div>
     <div id="tmOverlay" class="chips" style="margin-top:0"></div>
     <div class="row" style="justify-content:flex-end;margin:4px 0 0"><button class="btn ghost sm" onclick="downloadCanvas('tmCanvas','time-machine.png')">⬇ Download PNG</button></div>
-    <div class="chartwrap" style="height:360px"><canvas id="tmCanvas"></canvas></div>
+    <div class="chartwrap" style="height:320px"><canvas id="tmCanvas"></canvas></div>
     <div class="note" id="tmNote"></div>
-    <div class="row" style="justify-content:flex-end;margin-top:14px">${dlT('tmTable','time_series_table')}</div>
-    <div id="tmTable" style="margin-top:4px;overflow:auto"></div>
+    <div class="row" style="justify-content:flex-end;margin-top:12px">${dlT('tmTopTable','time_series_table')}</div>
+    <div id="tmTopTable" style="margin-top:4px;overflow:auto"></div>
+    <div style="margin-top:18px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="small mut" style="font-weight:600;margin-bottom:2px">Breakdown — by transit line (fixed)</div>
+      <div class="small mut" style="margin-bottom:6px">Always the same Blue / Silver / Gold / Red lines, independent of the chart above. Switch the metric below.</div>
+      <div id="tmLineChips" class="chips" style="margin-top:0"></div>
+      <div class="row" style="justify-content:flex-end;margin:4px 0 0"><button class="btn ghost sm" onclick="downloadCanvas('tmBreakCanvas','time-machine-breakdown.png')">⬇ Download PNG</button></div>
+      <div class="chartwrap" style="height:300px"><canvas id="tmBreakCanvas"></canvas></div>
+      <div class="note" id="tmBreakNote"></div>
+      <div class="row" style="justify-content:flex-end;margin-top:14px">${dlT('tmTable','time_series_table')}</div>
+      <div id="tmTable" style="margin-top:4px;overflow:auto"></div>
+    </div>
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px">
+      <div class="small mut" style="font-weight:600;margin-bottom:2px">Sector mix — per transit line, all sectors (%)</div>
+      <div class="small mut" style="margin-bottom:8px">Each line's share of businesses by sector, first year to latest. Retail falling while real estate and food rise is a replacement signal even when total counts hold steady.</div>
+      <div class="row" style="justify-content:flex-end;margin-bottom:4px">${dlT('tmSectorTable','sector_mix_table')}</div>
+      <div id="tmSectorTable" style="overflow:auto"></div>
+    </div>
     <div id="tmScore" style="margin-top:16px"></div>
     <div style="margin-top:10px" id="tmClip"></div>
   </div>`;
-  document.querySelectorAll('[data-tm]').forEach(ch=>ch.onclick=function(){_tm=this.dataset.tm;document.querySelectorAll('[data-tm]').forEach(x=>x.classList.remove('on'));this.classList.add('on');renderTmLineChips();renderTmOverlay();drawTM();});
-  renderTmLineChips();renderTmOverlay();
+  document.querySelectorAll('[data-tm]').forEach(ch=>ch.onclick=function(){_tm=this.dataset.tm;document.querySelectorAll('[data-tm]').forEach(x=>x.classList.remove('on'));this.classList.add('on');renderTmOverlay();drawTM();});
+  renderTmBreakControls();renderTmOverlay();
   document.getElementById('tmClip').innerHTML=clipBtn('Time machine',()=>tmClipText(),'Clip this trend');
   drawTM();
+  drawTmBreakdown();
+  renderSectorTable();
   drawTmScore();
 };
-function renderTmLineChips(){
+// Static sector table: per transit line, every sector's share at the first year, the latest year, and the change. Sectors live here as a table, never as chart lines.
+function renderSectorTable(){
+  const host=document.getElementById('tmSectorTable');if(!host)return;
+  const ma=window.MIXALL;
+  if(!_has(ma)||!ma.years||!ma.years.length){host.innerHTML='<span class="small mut">Sector data (MIXALL) is not loaded.</span>';return;}
+  const yrs=ma.years,i0=0,i1=yrs.length-1,keys=Object.keys(ma.areas);
+  const groups={};keys.forEach(k=>{const ln=((ma.areas[k].label||'').split('·')[0]||'').trim()||'Other';(groups[ln]=groups[ln]||[]).push(k);});
+  const lineOrder=['Blue','Silver','Gold','Red'].filter(g=>groups[g]).concat(Object.keys(groups).filter(g=>['Blue','Silver','Gold','Red'].indexOf(g)<0));
+  const secs=[['retail','Retail trade'],['realestate','Real estate'],['finance','Finance'],['food','Food service']];
+  const avg=(ks,sec,i)=>{let s=0,c=0;ks.forEach(k=>{const col=ma.areas[k][sec];const v=col?col[i]:null;if(v!=null){s+=v;c++;}});return c?s/c:null;};
+  const rows=[];
+  lineOrder.forEach(g=>{const ks=groups[g];secs.forEach((sn,si)=>{const a=avg(ks,sn[0],i0),b=avg(ks,sn[0],i1);if(a==null||b==null)return;const d=+(b-a).toFixed(1);rows.push([si===0?g+' line':'',sn[1],a.toFixed(1)+'%',b.toFixed(1)+'%',(d>0?'+':'')+d+' pp']);});});
+  host.innerHTML=_tmTableHTML({head:['Transit line','Sector',yrs[i0],yrs[i1],'Change'],rows});
+}
+// Breakdown controls are independent of the top chart: a fixed metric toggle plus the transit-line on/off chips.
+function renderTmBreakControls(){
   const host=document.getElementById('tmLineChips');if(!host)return;
-  const sub=(TM_SERIES[_tm]||{}).sub;
-  if(sub==='sectors'){const secs=[['retail','Retail'],['realestate','Real estate'],['finance','Finance'],['food','Food & hotels']];
-    host.innerHTML='<span class="small mut" style="align-self:center;margin-right:4px">sector:</span>'+secs.map(p=>`<span class="chip ${_tmSector===p[0]?'on':''}" data-ts="${p[0]}">${p[1]}</span>`).join('');
-    host.querySelectorAll('[data-ts]').forEach(c=>c.onclick=function(){_tmSector=this.dataset.ts;renderTmLineChips();drawTM();});return;}
-  if(sub==='lines'){const src=_tm==='sales'?window.HOMESALES:window.DEMOS;const lines=(src&&src.lines)?Object.keys(src.lines):[];
-    host.innerHTML='<span class="small mut" style="align-self:center;margin-right:4px">compare lines:</span>'+lines.map(ln=>`<span class="chip ${_tmLines[ln]?'on':''}" data-tl="${ln}" style="border-color:${LINEHEX[ln]||'#888'}">${_cap(ln)}</span>`).join('');
-    host.querySelectorAll('[data-tl]').forEach(c=>c.onclick=function(){_tmLines[this.dataset.tl]=!_tmLines[this.dataset.tl];this.classList.toggle('on');drawTM();});return;}
-  host.innerHTML='';
+  const metrics=[['demos','Demolition rate'],['sales','Home sales']];
+  const src=_tmBreakMetric==='sales'?window.HOMESALES:window.DEMOS;
+  const lines=(src&&src.lines)?Object.keys(src.lines):[];
+  host.innerHTML='<span class="small mut" style="align-self:center;margin-right:4px">metric:</span>'+
+    metrics.map(m=>`<span class="chip ${_tmBreakMetric===m[0]?'on':''}" data-bm="${m[0]}">${m[1]}</span>`).join('')+
+    '<span class="small mut" style="align-self:center;margin:0 4px 0 14px">lines:</span>'+
+    lines.map(ln=>`<span class="chip ${_tmLines[ln]?'on':''}" data-tl="${ln}" style="border-color:${LINEHEX[ln]||'#888'}">${_cap(ln)}</span>`).join('');
+  host.querySelectorAll('[data-bm]').forEach(c=>c.onclick=function(){_tmBreakMetric=this.dataset.bm;renderTmBreakControls();drawTmBreakdown();});
+  host.querySelectorAll('[data-tl]').forEach(c=>c.onclick=function(){_tmLines[this.dataset.tl]=!_tmLines[this.dataset.tl];this.classList.toggle('on');drawTmBreakdown();});
 }
 function _tmTableHTML(t){
   return '<table style="border-collapse:collapse;font-size:12px;width:100%"><thead><tr>'+
@@ -1092,45 +1114,86 @@ function _tmTableHTML(t){
 }
 function renderTmOverlay(){
   const host=document.getElementById('tmOverlay');if(!host)return;
-  const opts=['homeval','rent','rezone','corridor','teardown'].filter(id=>id!==_tm);
-  host.innerHTML='<span class="small mut" style="align-self:center;margin-right:4px">overlay (right axis):</span>'+
+  const opts=TM_ORDER.filter(id=>id!==_tm);
+  host.innerHTML='<span class="small mut" style="align-self:center;margin-right:4px">right axis — add a second variable:</span>'+
     '<span class="chip '+(!_tmOverlay?'on':'')+'" data-ov="">none</span>'+
     opts.map(id=>'<span class="chip '+(_tmOverlay===id?'on':'')+'" data-ov="'+id+'">'+TM_SERIES[id].label+'</span>').join('');
   host.querySelectorAll('[data-ov]').forEach(c=>c.onclick=function(){_tmOverlay=this.dataset.ov;renderTmOverlay();drawTM();});
 }
+const _TM_EVENTS=[{year:2007,label:'Blue Line opens',kind:'rail'},{year:2018,label:'Blue extension',kind:'rail'},{year:2012,label:'⚠ 2012',kind:'break'},{year:2016,label:'⚠ 2016',kind:'break'}];
+// Average a sector's share across the built (non-Red) corridor areas, year by year — the single "blue corridor" headline for the Sector-by-area variable.
+function _tmBuiltAreaAvg(sec){var ma=window.MIXALL;if(!_has(ma))return null;var keys=Object.keys(ma.areas);var built=keys.filter(function(k){return (ma.areas[k].label||'').indexOf('Red')<0;});if(!built.length)return null;return ma.years.map(function(_,i){var s=0,c=0;built.forEach(function(k){var col=ma.areas[k][sec];var v=col?col[i]:null;if(v!=null){s+=v;c++;}});return c?+(s/c).toFixed(2):null;});}
+// The single headline line for the top chart: built/Blue corridor only, no compare lines.
+function tmMainDataset(id,b){
+  if(id==='demos'&&_has(window.DEMOS)&&window.DEMOS.lines&&window.DEMOS.lines.blue)return {label:'Blue line',data:window.DEMOS.lines.blue.slice(),borderColor:LINEHEX.blue,backgroundColor:'transparent',tension:.25,fill:false};
+  if(id==='sales'&&_has(window.HOMESALES)&&window.HOMESALES.lines&&window.HOMESALES.lines.blue)return {label:'Blue line',data:window.HOMESALES.lines.blue.slice(),borderColor:LINEHEX.blue,backgroundColor:'transparent',tension:.25,fill:false};
+  if(id==='area'){var avg=_tmBuiltAreaAvg(_tmSector);if(avg)return {label:'Built corridor · '+_secName(_tmSector),data:avg,borderColor:LINEHEX.blue,backgroundColor:'transparent',tension:.25,fill:false};}
+  if(b&&b.ds&&b.ds[0])return Object.assign({},b.ds[0],{fill:false});
+  return null;
+}
 function drawTM(){
   const def=TM_SERIES[_tm]||TM_SERIES.homeval;
   let b;try{b=def.build();}catch(e){b={labels:[],ds:[],note:'',error:'Build error: '+e.message,table:null};}
-  const noteEl=document.getElementById('tmNote'),tableEl=document.getElementById('tmTable');
-  if(tableEl)tableEl.innerHTML=b.table?_tmTableHTML(b.table):'';
-  if(noteEl)noteEl.innerHTML=b.error?`<span style="color:var(--warn)">${b.error}</span>`:b.note;
-  const canvas=document.getElementById('tmCanvas');if(!canvas)return;
-  try{var _prev=(window.Chart&&Chart.getChart)?Chart.getChart(canvas):null;if(_prev)_prev.destroy();}catch(e){}
-  if(_tmChart){try{_tmChart.destroy();}catch(e){}_tmChart=null;}
-  if(b.error||!b.labels.length){const c=canvas.getContext&&canvas.getContext('2d');if(c)c.clearRect(0,0,canvas.width||0,canvas.height||0);return;}
-  let labels=b.labels.slice(),datasets=b.ds.map(d=>Object.assign({},d,{yAxisID:'y',spanGaps:true})),y2=null;
-  if(_tmOverlay&&_tmOverlay!==_tm&&TM_SERIES[_tmOverlay]){
-    let ob;try{ob=TM_SERIES[_tmOverlay].build();}catch(e){ob=null;}
-    if(ob&&ob.labels&&ob.ds.length){
-      const union=Array.from(new Set(b.labels.concat(ob.labels))).sort();
-      const remap=(lbls,data)=>union.map(y=>{const i=lbls.indexOf(y);return i>=0?data[i]:null;});
-      labels=union;
-      datasets=b.ds.map(d=>Object.assign({},d,{yAxisID:'y',spanGaps:true,data:remap(b.labels,d.data)}));
-      const od=ob.ds[0];
-      datasets.push(Object.assign({},od,{label:TM_SERIES[_tmOverlay].label+' (right axis →)',yAxisID:'y2',spanGaps:true,borderDash:[5,4],fill:false,backgroundColor:'transparent',borderColor:'#6b4ea0',data:remap(ob.labels,od.data)}));
-      y2={position:'right',beginAtZero:false,grid:{drawOnChartArea:false},ticks:ob.fmt?{callback:ob.fmt,color:'#6b4ea0'}:{color:'#6b4ea0'},title:{display:true,text:'right axis → '+TM_SERIES[_tmOverlay].label,color:'#6b4ea0',font:{weight:'600'}}};
-      if(noteEl)noteEl.innerHTML=b.note+' <span class="mut"><b style="color:#6b4ea0">Dashed purple line = '+TM_SERIES[_tmOverlay].label+', read on the right-hand axis.</b></span>';
+  const noteEl=document.getElementById('tmNote');
+  const canvas=document.getElementById('tmCanvas');
+  if(canvas){
+    try{var _prev=(window.Chart&&Chart.getChart)?Chart.getChart(canvas):null;if(_prev)_prev.destroy();}catch(e){}
+    if(_tmChart){try{_tmChart.destroy();}catch(e){}_tmChart=null;}
+    if(b.error||!b.labels.length){const c=canvas.getContext&&canvas.getContext('2d');if(c)c.clearRect(0,0,canvas.width||0,canvas.height||0);if(noteEl)noteEl.innerHTML=b.error?`<span style="color:var(--warn)">${b.error}</span>`:'';}
+    else{
+      const main=tmMainDataset(_tm,b);
+      let labels=b.labels.slice();
+      let datasets=main?[Object.assign({},main,{yAxisID:'y',spanGaps:true})]:[];
+      let y2=null,rightNote='';
+      if(_tmOverlay&&_tmOverlay!==_tm&&TM_SERIES[_tmOverlay]){
+        let ob;try{ob=TM_SERIES[_tmOverlay].build();}catch(e){ob=null;}
+        const omain=(ob&&ob.labels&&ob.labels.length)?tmMainDataset(_tmOverlay,ob):null;
+        if(ob&&omain){
+          const union=Array.from(new Set(b.labels.concat(ob.labels))).sort();
+          const remap=(lbls,data)=>union.map(y=>{const i=lbls.indexOf(y);return i>=0?data[i]:null;});
+          labels=union;
+          datasets=main?[Object.assign({},main,{yAxisID:'y',spanGaps:true,data:remap(b.labels,main.data)})]:[];
+          datasets.push(Object.assign({},omain,{label:TM_SERIES[_tmOverlay].label+' (right axis →)',yAxisID:'y2',spanGaps:true,borderDash:[5,4],fill:false,backgroundColor:'transparent',borderColor:'#6b4ea0',data:remap(ob.labels,omain.data)}));
+          y2={position:'right',beginAtZero:false,grid:{drawOnChartArea:false},ticks:ob.fmt?{callback:ob.fmt,color:'#6b4ea0'}:{color:'#6b4ea0'},title:{display:true,text:'right → '+TM_SERIES[_tmOverlay].label,color:'#6b4ea0',font:{weight:'600'}}};
+          rightNote=' <span class="mut"><b style="color:#6b4ea0">Dashed purple = '+TM_SERIES[_tmOverlay].label+', on the right axis.</b></span>';
+        }
+      }
+      try{
+        const ctx=canvas.getContext('2d');
+        const scales={x:{grid:{display:false}},y:{beginAtZero:false,grid:{color:'#eef2f7'},ticks:b.fmt?{callback:b.fmt}:{},title:{display:true,text:TM_SERIES[_tm].label,font:{weight:'600'}}}};
+        if(y2)scales.y2=y2;
+        _tmChart=new Chart(ctx,{type:'line',data:{labels,datasets},plugins:[tsMarkerPlugin],
+          options:{animation:false,maintainAspectRatio:false,plugins:{legend:{position:'top'},tsmarkers:{events:_TM_EVENTS}},scales}});
+        if(noteEl)noteEl.innerHTML='Built (Blue / Silver) corridor headline. The by-transit-line breakdown and the sector-mix table below stay fixed as you change this chart.'+rightNote;
+      }catch(e){if(noteEl)noteEl.innerHTML=`<span style="color:var(--warn)">Chart could not render (${e.message}). See the table below.</span>`;}
     }
   }
-  try{
-    const ctx=canvas.getContext('2d');
-    const scales={x:{grid:{display:false}},y:{beginAtZero:false,grid:{color:'#eef2f7'},ticks:b.fmt?{callback:b.fmt}:{}}};
-    if(y2)scales.y2=y2;
-    // Reference overlays on every time series: green = transit milestones, yellow = years to read with caution (see Field guide).
-    const _tsEv=[{year:2007,label:'Blue Line opens',kind:'rail'},{year:2018,label:'Blue extension',kind:'rail'},{year:2012,label:'⚠ 2012',kind:'break'},{year:2016,label:'⚠ 2016',kind:'break'}];
-    _tmChart=new Chart(ctx,{type:'line',data:{labels,datasets},plugins:[tsMarkerPlugin],
-      options:{animation:false,maintainAspectRatio:false,plugins:{legend:{position:'top'},tsmarkers:{events:_tsEv}},scales}});
-  }catch(e){if(noteEl)noteEl.innerHTML=`<span style="color:var(--warn)">Chart could not render (${e.message}). The data table below still shows every value.</span>`;}
+  const topTable=document.getElementById('tmTopTable');
+  if(topTable)topTable.innerHTML=(b&&b.table)?_tmTableHTML(b.table):'';
+}
+// Fixed by-transit-line breakdown: same Blue/Silver/Gold/Red lines every time, with its own metric toggle. Independent of the top chart's variable.
+function drawTmBreakdown(){
+  const noteEl=document.getElementById('tmBreakNote'),tableEl=document.getElementById('tmTable');
+  const isSales=_tmBreakMetric==='sales';
+  const src=isSales?window.HOMESALES:window.DEMOS;
+  const canvas=document.getElementById('tmBreakCanvas');
+  if(!_has(src)||!src.lines){if(tableEl)tableEl.innerHTML='';if(noteEl)noteEl.innerHTML='<span style="color:var(--warn)">Per-line data is not loaded.</span>';if(canvas){const c0=canvas.getContext&&canvas.getContext('2d');if(c0)c0.clearRect(0,0,canvas.width||0,canvas.height||0);}return;}
+  const labels=src.years,all=Object.keys(src.lines),sel=all.filter(ln=>_tmLines[ln]);
+  if(tableEl)tableEl.innerHTML=_tmTableHTML({head:['Year',...all.map(l=>_cap(l)+' line')],rows:labels.map((y,i)=>[y,...all.map(l=>src.lines[l][i])])});
+  if(canvas){
+    try{var _prev=(window.Chart&&Chart.getChart)?Chart.getChart(canvas):null;if(_prev)_prev.destroy();}catch(e){}
+    if(_tmBreakChart){try{_tmBreakChart.destroy();}catch(e){}_tmBreakChart=null;}
+    const c=canvas.getContext&&canvas.getContext('2d');
+    if(!sel.length){if(c)c.clearRect(0,0,canvas.width||0,canvas.height||0);if(noteEl)noteEl.innerHTML='<span class="mut">Turn on at least one transit line above.</span>';return;}
+    try{
+      const ctx=canvas.getContext('2d');
+      const datasets=sel.map(ln=>({label:_cap(ln)+' line',data:src.lines[ln],borderColor:LINEHEX[ln]||'#888',backgroundColor:'transparent',tension:.25,borderDash:ln==='red'?[6,4]:[],spanGaps:true}));
+      const scales={x:{grid:{display:false}},y:{beginAtZero:false,grid:{color:'#eef2f7'}}};
+      _tmBreakChart=new Chart(ctx,{type:'line',data:{labels:labels.slice(),datasets},plugins:[tsMarkerPlugin],
+        options:{animation:false,maintainAspectRatio:false,plugins:{legend:{position:'top'},tsmarkers:{events:_TM_EVENTS}},scales}});
+      if(noteEl)noteEl.innerHTML=isSales?'Home sales near each transit line, over time (Red is dashed). The same four lines are shown for every top-chart variable.':'Residential demolition-rate index by transit line, where 1.0 is the countywide baseline (Red is dashed). The same four lines are shown for every top-chart variable.';
+    }catch(e){if(noteEl)noteEl.innerHTML=`<span style="color:var(--warn)">Breakdown chart could not render (${e.message}). The table below still shows every value.</span>`;}
+  }
 }
 /* ---- Time machine: before -> after scorecard (pick variables) ---- */
 const TM_CAT=[
@@ -1459,75 +1522,35 @@ function runTriage(){
 /* ---------------- MISSIONS ---------------- */
 const MISSIONS=[
   {id:'m1',t:'Lay of the land',time:'25 min',phase:1,
-   q:'Before any model: what kind of places do these trains run through? Read the corridor with your eyes.',
-   steps:['Open the Map studio. Shade by <b>household income</b>, then <b>% owner-occupied</b>, then <b>residential demolitions</b>.',
-     'Find the three Red Line neighborhoods (outlined in black, far north). How do they compare to the inner Blue/Silver areas?',
-     'Clip one map that surprised you.'],
-   tool:'map',
-   checks:['Which two or three neighborhoods look <i>most</i> exposed, with low income, many renters and active demolition, and which look insulated?']},
-  {id:'m2',t:'Is the Red corridor really different?',time:'25 min',phase:1,
-   q:'The brief warns the Red Line is wealthier. Is that true, and does "wealthier" mean local shops are more likely to survive?',
-   steps:['In Chart studio (Neighborhood level), plot <b>income</b> (X) vs <b>residential demolitions</b> (Y). Color by "Red Line vs rest".',
-     'Switch to the "Carry to the Red Line" view and read the Blue/Silver/Red comparison table.',
-     'Clip the comparison.'],
-   tool:'chart',
-   checks:['Name three concrete ways the Red corridor differs from the Blue. For each, say whether it makes local businesses <i>more likely to survive</i>, <i>more likely to close</i>, or <i>just different</i>.']},
+   q:'Before any model, get a feel for the kind of places these trains run through.',
+   steps:['Explore the corridors in the Map studio. Shade by whatever you think matters and notice how the Red Line towns up north compare to the inner Blue and Silver areas.'],
+   tool:'map',tools:['map'],lens:'Descriptive',
+   checks:['Which areas look most exposed, and which look insulated?']},
+  {id:'m2',t:'How is the Red corridor different — and changing?',time:'30 min',phase:1,
+   q:'The brief says the Red corridor is wealthier and different. Test that in the <b>Chart studio</b>, then use the <b>Time machine</b> to see whether the corridor is staying the same or quietly changing.',
+   steps:['Compare the corridors in the Chart studio, then use the Time machine to watch how the mix of businesses shifts over the years.'],
+   tool:'chart',tools:['chart','time'],lens:'Descriptive',
+   checks:['How does the Red corridor differ from the Blue, and is anything changing along the built lines?']},
   {id:'m3',t:'Where is the land turning over?',time:'30 min',phase:1,
-   q:'Displacement starts with land. Where is the building worth little next to the dirt it sits on?',
-   steps:['Map studio: shade by <b>% parcels underutilized</b> and <b>% out-of-state owners</b>.',
-     'Chart studio (Neighborhood): plot <b>% underutilized</b> vs <b>demolitions</b>. Is the signal real?',
-     'Both of these are ingredients the City used to build its own index. Hold that thought for Stage 1, where the index is just one optional input.'],
-   tool:'map',
-   checks:['Where is redevelopment pressure highest? Does it line up with the train, or with something else (downtown, the river, the airport)?']},
-  {id:'m4',t:'What happened to retail?',time:'30 min',phase:1,
-   q:'A corridor can keep the same number of businesses while completely changing who they are. Look for replacement, not just shrinkage.',
-   steps:['Time machine → "Sector mix shift". Watch retail vs real estate vs food service.',
-     'Mind the ⚠2012/2016 recording breaks before you call a jump "real".',
-     'Time machine → Sector by area: watch retail in South End against the Red Line areas.'],
-   tool:'time',
-   checks:['Who is being replaced by whom along the built corridors? What evidence separates a real shift from a measurement artefact?']},
-  {id:'m5',t:'Does more always mean better?',time:'25 min',phase:1,
-   q:'A model with more inputs usually scores higher on the data it trained on. Is it actually better on new businesses?',
-   steps:['Open Stage 1 (Build the model). Start with a few plain inputs such as distance, land value and owns building. Note the Red-Line accuracy and AUC.',
-     'Add more inputs, including the City displacement score. Watch training accuracy against the held-out Red-Line accuracy.',
-     'Decide whether each added input helps on the Red Line, or just fits the Blue and Silver businesses better.'],
-   tool:'survival1',
-   checks:['Which inputs raised Red-Line accuracy, and which only raised training accuracy? Why is the held-out number the honest one?']},
-  {id:'m6',t:'Does "near a station" even matter?',time:'25 min',phase:1,
-   q:'The premise is that proximity to the train changes a business’s odds. Test it instead of assuming it.',
-   steps:['In Stage 1, include <b>distance to station</b> and read its coefficient: does being closer raise or lower survival?',
-     'Compare it against a stronger signal such as owning the building.',
-     'Remember distance is measured to the nearest station on the business’s own line.'],
-   tool:'survival1',
-   checks:['Does proximity actually move survival in this data? How big is it next to the strongest factor, and could a third factor explain it?']},
-  {id:'m7',t:'Build and defend your survival model',time:'40 min',phase:1,
-   q:'Commit to a set of inputs that predicts which businesses stay active.',
-   steps:['In Stage 1, choose the inputs you trust and read the coefficient chart: which factors raise survival, which lower it?',
-     'Aim for high Red-Line accuracy and AUC, but keep a version you can explain, not just the highest number.',
-     'Your model is ready to read on the map.'],
-   tool:'survival1',
-   checks:['State your model in one sentence. What is its Red-Line accuracy versus the baseline, and which inputs did you trust most?']},
-  {id:'m8',t:'Read it on the Red Line',time:'35 min',phase:2,
-   q:'Your model learned on Blue and Silver. Where does it expect survivors and businesses likely to close on the Red Line, and is it right?',
-   steps:['In Stage 2, look at the two maps and toggle <b>predicted</b> versus <b>actual</b> survival.',
-     'Find neighborhoods where the model is confident, and where it is wrong.',
-     'Clip the result and note the Red-Line accuracy.'],
-   tool:'survival3',
-   checks:['Where does the model transfer well to the Red Line, and where does it miss? What might explain the misses?']},
-  {id:'m9',t:'Argue against yourself',time:'20 min',phase:2,
-   q:'The strongest analyst states the best case <i>against</i> their own conclusion.',
-   steps:['Revisit your shortlist and your model. Find the evidence that complicates your story.',
-     'In the answer box below, write the case for who is affected and how far the model transfers to the Red Line.',
-     'It is fully legitimate to conclude the model partly does <i>not</i> transfer to the wealthier Red corridor.'],
-   tool:'survival3',
-   checks:['What is the single best argument that your story about which businesses close is wrong or overstated? How would you check it with more data?']},
-  {id:'m10',t:'Make your case',time:'25 min',phase:2,
-   q:'Assemble everything into one defensible recommendation for the City.',
-   steps:['In the answer box below, write your recommendation: which Red Line businesses or areas the City should prioritize, and why.',
-     'Make sure your shortlist in Stage 2 reflects your top picks; export it (CSV) for your slides.',
-     'Build your final presentation in the <a href="https://docs.google.com/presentation/d/1T5wEt3Wh-vwK5j-QskoAHFabN6Kc-ZhFS4spuLkn7ro/copy" target="_blank" rel="noopener">slide template</a> (opens your own copy) and present it.'],
-   tool:'survival3',
-   checks:['If the City could act on only three of your flagged areas or business types, which three and why?']},
+   q:'Displacement often starts with the land. Use <b>Correlations</b> to see what moves with demolition and survival, then <b>Dig into one area</b> to understand why.',
+   steps:['Explore parcel and demolition patterns in the Map and Chart studios to find where this redevelopment pressure is building.'],
+   tool:'corr',tools:['corr','dig','map'],lens:'Diagnostic',
+   checks:['Where is redevelopment pressure highest, and what does it line up with?']},
+  {id:'m4',t:'Build and defend your survival model',time:'45 min',phase:1,
+   q:'Build a model that predicts which businesses stay open — and be honest about what it can and cannot do.',
+   steps:['In Stage 1, try different inputs and watch how the model responds. Keep a model you can actually explain, not just the one with the highest score.'],
+   tool:'survival1',tools:['survival1'],lens:'Predictive',
+   checks:['What does your model say drives survival, and how far would you trust it on the Red Line?']},
+  {id:'m5',t:'Read it on the Red Line',time:'30 min',phase:2,
+   q:'Your model learned on Blue and Silver. See what it predicts for the planned Red Line.',
+   steps:['In Stage 2, explore the predicted survival rates and dig into the businesses that stand out.'],
+   tool:'survival3',tools:['survival3'],lens:'Predictive',
+   checks:['Where does the model expect the most closures, and does it match what you saw earlier?']},
+  {id:'m6',t:'Argue against yourself, then make your case',time:'35 min',phase:2,
+   q:'Find the best case against your own conclusion, then make one honest recommendation for the City and build your final deck in the <a href="https://docs.google.com/presentation/d/1T5wEt3Wh-vwK5j-QskoAHFabN6Kc-ZhFS4spuLkn7ro/copy" target="_blank" rel="noopener">slide template</a>.',
+   steps:[],
+   tool:'survival3',tools:['survival3'],lens:'Prescriptive',
+   checks:['What would the City prioritise, and what is the strongest argument that you are wrong?']},
 ];
 VIEWS.missions=function(){
   const m=document.getElementById('main');
@@ -1536,12 +1559,16 @@ VIEWS.missions=function(){
   <div class="card">
     <div class="kick">Orient · your tasks</div>
     <h2>Tasks</h2>
-    <p class="small mut">Each task points you to a tool and asks what you concluded. You are predicting <b>business survival</b>; your answers build your final case. Do them in order or jump around.</p>
+    <p class="small mut">Each task points you to the right tools and asks what you concluded. The tasks climb the <b>analytics ladder</b> — first <b>describe</b> what is happening, then <b>diagnose</b> why, then <b>predict</b> what comes next, and finally <b>prescribe</b> what the City should do. Your answers build your final case.</p>
+    <div class="row" style="gap:6px;flex-wrap:wrap;align-items:center;margin:10px 0 12px">${['Descriptive','Diagnostic','Predictive','Prescriptive'].map((l,i)=>(i?'<span class="mut" style="margin:0 2px">→</span>':'')+_lensBadge(l)).join('')}</div>
     <div class="spread"><div class="meter" style="flex:1;margin-right:12px"><i style="width:${pct(done,MISSIONS.length)}%"></i></div><b>${done}/${MISSIONS.length} complete</b></div>
   </div>
   <div id="missionList"></div>`;
   drawMissions();
 };
+function _lensColor(l){return {Descriptive:'#1f6feb',Diagnostic:'#b08a2e',Predictive:'#6b4ea0',Prescriptive:'#127a4b'}[l]||'#6b7280';}
+function _lensBadge(l){if(!l)return '';const c=_lensColor(l);return '<span style="display:inline-block;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:'+c+';background:'+c+'1a;border:1px solid '+c+'55;border-radius:9px;padding:1px 8px">'+l+'</span>';}
+function _toolName(id){const it=NAV.flatMap(g=>g.items).find(x=>x.id===id);return it?it.t:id;}
 function drawMissions(){
   const host=document.getElementById('missionList');
   host.innerHTML=MISSIONS.map((m,i)=>{
@@ -1549,13 +1576,12 @@ function drawMissions(){
     return `<div class="mcard ${st.done?'done':''} ${open?'open':''}" data-m="${m.id}">
       <div class="mhead" onclick="toggleMission('${m.id}')">
         <div class="mnum">${st.done?'✓':i+1}</div>
-        <div style="flex:1"><div class="mtitle">${esc(m.t)}</div><div class="mmeta">${m.phase===2?'Part 2 · The Red Line':'Part 1 · Learn from Blue & Silver'}</div></div>
+        <div style="flex:1"><div class="mtitle">${esc(m.t)}</div><div class="mmeta">${_lensBadge(m.lens)} <span style="vertical-align:middle">${m.phase===2?'Part 2 · The Red Line':'Part 1 · Blue & Silver'}</span></div></div>
         <div class="small mut">${open?'▾':'▸'}</div>
       </div>
       <div class="mbody">
         <p style="font-size:14px;color:var(--ink2)">${m.q}</p>
-        <div style="margin:6px 0">${m.steps.map((s,j)=>`<div class="step"><span class="sn">${j+1}</span><div>${s}</div></div>`).join('')}</div>
-        <button class="btn ghost sm" onclick="go('${m.tool}')">Open ${NAV.flatMap(g=>g.items).find(x=>x.id===m.tool).t} →</button>
+        <div class="row" style="gap:6px;flex-wrap:wrap">${(m.tools||[m.tool]).map(t=>`<button class="btn ghost sm" onclick="go('${t}')">Open ${_toolName(t)} →</button>`).join('')}</div>
         <div style="margin-top:12px">${m.checks.map((c,j)=>`<div style="margin-bottom:8px"><div class="small" style="font-weight:600;margin-bottom:4px">${c}</div>
           <textarea data-mc="${m.id}:${j}" placeholder="Your answer…">${esc((st.answers&&st.answers[j])||'')}</textarea></div>`).join('')}</div>
         <button class="btn sm" onclick="completeMission('${m.id}')">${st.done?'✓ Completed (tap to reopen)':'Mark task complete'}</button>
@@ -1601,12 +1627,13 @@ VIEWS.feedback=function(){
   '<div class="card"><div id="fbStatus"></div><div class="row" style="gap:8px">'+
     '<button class="btn" id="fbSubmitBtn" onclick="fbSubmit()">Submit results &amp; feedback</button>'+
     '<button class="btn sec" onclick="fbDownload()">⬇ Download a copy</button></div>'+
-    '<p class="small mut" style="margin-top:8px">Submitting sends your team name, email, key model results (inputs, Red Line accuracy, shortlist size) and these ratings to the organizer ('+ORGANIZER_EMAIL+').'+(SUBMIT_URL?'':' <b>Note:</b> automatic saving is not switched on yet, so use Download and send the file in.')+'</p></div>';
+    '<p class="small mut" style="margin-top:8px">Submitting sends your team name, your name, key model results (inputs, model accuracy, shortlist size) and these ratings to the organizer ('+ORGANIZER_EMAIL+').'+(SUBMIT_URL?'':' <b>Note:</b> automatic saving is not switched on yet, so use Download and send the file in.')+'</p></div>';
   document.querySelectorAll('[data-fb]').forEach(function(sl){sl.oninput=function(){if(!S.feedback)S.feedback={};S.feedback[this.dataset.fb]=+this.value;var el=document.getElementById('fbv_'+this.dataset.fb);if(el)el.textContent=this.value;save();};});
   document.querySelectorAll('[data-fbq]').forEach(function(t){t.oninput=function(){if(!S.feedback)S.feedback={};S.feedback[this.dataset.fbq]=this.value;save();};});
 };
 function fbDownload(){var f=S.feedback||{};var rows=[['question','rating (1-5) or answer']];
   if(S.team&&S.team.name)rows.push(['team',S.team.name]);
+  if(S.team&&S.team.participants)rows.push(['name',S.team.participants]);
   FB_APP.concat(FB_EVENT).forEach(function(q){rows.push([q[1],f[q[0]]!=null?f[q[0]]:'']);});
   rows.push(['What worked well?',f.liked||'']);rows.push(['What would you improve?',f.improve||'']);
   var csv=rows.map(function(r){return r.map(function(c){c=''+(c==null?'':c);return (c.indexOf(',')>=0||c.indexOf('"')>=0||c.indexOf('\n')>=0)?'"'+c.replace(/"/g,'""')+'"':c;}).join(',');}).join('\n');
@@ -1616,7 +1643,7 @@ function fbMetrics(){var mm=(typeof smResultsModel==='function')?smResultsModel(
   return {inputs:mm?mm.inputs:[],redAccuracy:mm?mm.redAccuracy:null,baseline:mm?mm.baseline:null,auc:mm?mm.auc:null,
     shortlistCount:(S.shortlist||[]).length,tasksComplete:done+'/'+((MISSIONS||[]).length),hypothesis:S.hypothesis||''};}
 function fbPayload(){var f=S.feedback||{};
-  return {type:'charlotte_submission',team:(S.team&&S.team.name)||'',email:(S.team&&S.team.email)||'',organizer:ORGANIZER_EMAIL,submittedAt:new Date().toISOString(),
+  return {type:'charlotte_submission',team:(S.team&&S.team.name)||'',participants:(S.team&&S.team.participants)||'',email:'',organizer:ORGANIZER_EMAIL,submittedAt:new Date().toISOString(),
     metrics:fbMetrics(),
     feedback:{app_ease:f.app_ease,app_tools:f.app_tools,app_clear:f.app_clear,app_design:f.app_design,ev_overall:f.ev_overall,ev_learn:f.ev_learn,ev_org:f.ev_org,ev_recommend:f.ev_recommend,liked:f.liked||'',improve:f.improve||''}};}
 function fbSubmit(){
@@ -1646,7 +1673,7 @@ function buildResults(){
   var answers={};(MISSIONS||[]).forEach(function(m){var st=S.missions[m.id];if(st&&st.answers){var a=Object.keys(st.answers).map(function(k){return st.answers[k];}).filter(function(x){return x&&x.trim();});if(a.length)answers[m.t]=a;}});
   var done=(MISSIONS||[]).filter(function(m){return S.missions[m.id]&&S.missions[m.id].done;}).length;
   var shortlist=[];try{var e=exEnsure();var byId={};e._scored.forEach(function(o){byId[o.id]=o;});(S.shortlist||[]).forEach(function(id){var o=byId[id];if(o)shortlist.push({id:id,sector:o.sector,neighborhood:smTown(o.npa),npa:o.npa,survivalPct:Math.round(o.p*100),outlook:exBand(o.p).label});});}catch(err){}
-  return {team:(S.team&&S.team.name)||'',email:(S.team&&S.team.email)||'',organizer:ORGANIZER_EMAIL,submittedAt:new Date().toISOString(),
+  return {team:(S.team&&S.team.name)||'',participants:(S.team&&S.team.participants)||'',email:'',organizer:ORGANIZER_EMAIL,submittedAt:new Date().toISOString(),
     hypothesis:S.hypothesis||'',conclusion:S.conclusion||'',tasksComplete:done+'/'+((MISSIONS||[]).length),
     model:smResultsModel(),answers:answers,shortlist:shortlist};
 }
@@ -1666,7 +1693,7 @@ VIEWS.submit=function(){
     '<div class="kick">Finish</div>'+
     '<h2>Finish &amp; submit</h2>'+
     '<p class="lede">Review your work, write a short recommendation, then download your results and email them to the organizer.</p>'+
-    '<div class="note" style="margin-top:0"><b>Team:</b> '+esc((S.team&&S.team.name)||'—')+' &middot; '+esc((S.team&&S.team.email)||'')+'</div>'+
+    '<div class="note" style="margin-top:0"><b>Team:</b> '+esc((S.team&&S.team.name)||'—')+' &middot; '+esc((S.team&&S.team.participants)||'')+'</div>'+
   '</div>'+
   '<div class="grid2">'+
     '<div class="card"><h3 style="margin-bottom:8px">Your work so far</h3>'+
@@ -1704,7 +1731,7 @@ VIEWS.dig=function(){
   if(_dig.npa==null){const cnt={};(window.BIZ?BIZ.rows:[]).forEach(r=>{const n=r[BIZc.npa];if(n!=null)cnt[n]=(cnt[n]||0)+1;});const reds=D.npa.filter(x=>npaVal(x,'is_red')===1).map(x=>npaVal(x,'npa')).sort((x,y)=>(cnt[y]||0)-(cnt[x]||0));_dig.npa=(reds[0]&&cnt[reds[0]])?reds[0]:(reds[0]||npaVal(D.npa[0],'npa'));}
   m.innerHTML=`
   <div class="card">
-    <div class="kick">Investigate · dig into one area</div>
+    <div class="kick">Investigate · diagnose · dig into one area</div>
     <h2>Explore one neighborhood</h2>
     <p class="small mut">Pick a place and read it at every scale: the neighborhood, its land, and its businesses.</p>
     <div class="row">
@@ -1755,7 +1782,7 @@ function drawDig(){
     const pos=scored.findIndex(x=>x.id===id);
     idxBlock=pos>=0?`<div class="okbox"><b>Your custom index</b> ranks this neighborhood <b>#${pos+1} of ${scored.length}</b> corridor areas for displacement pressure (score ${scored[pos].v.toFixed(2)}). <span class="mut">Build/adjust it in “Build your own index”.</span></div>`:'';
   } else {
-    idxBlock=`<div class="note">Build a weighted index in <b>“Build your own index”</b> and this area will show its rank here.</div>`;
+    idxBlock='';
   }
   const tile=(b,l,c)=>statTile(b,l,c);
   document.getElementById('digBody').innerHTML=`
@@ -1961,7 +1988,7 @@ function corrVal(r,k){if(_corr.level==='surv')return r[RL2.cols.indexOf(k)];retu
 function corrVarList(){
   if(_corr.level==='surv') return window.RL2?['survival'].concat(RL2.inputs.map(d=>d.key)):[];
   if(_corr.level==='biz') return BIZ_NUM;
-  return D.catalog.filter(c=>c.level==='Neighborhood'&&(c.key in NPAI)&&c.key!=='npa'&&NPA_COV[c.key]>=COV_MIN).map(c=>c.key);
+  return D.catalog.filter(c=>c.level==='Neighborhood'&&(c.key in NPAI)&&c.key!=='npa'&&c.key!=='disp'&&NPA_COV[c.key]>=COV_MIN).map(c=>c.key);
 }
 function corrDefault(){
   if(_corr.level==='surv') return ['survival','displacement_score','own_building','dist_station_mi','land_value','building_age'];
@@ -1979,7 +2006,7 @@ VIEWS.corr=function(){
   const m=document.getElementById('main');
   m.innerHTML=`
   <div class="card">
-    <div class="kick" style="color:var(--blue)">Investigate · correlations</div>
+    <div class="kick" style="color:var(--blue)">Investigate · diagnose · correlations</div>
     <h2>Correlations</h2>
     <p class="small mut">Each cell is the correlation between two measures, from -1 (blue) to +1 (red). Click a cell to open that pair in the chart studio.</p>
     <div class="row" style="align-items:center">
@@ -2040,7 +2067,7 @@ function corrClipText(){
  * REGRESSION (simple, exploratory) — business + neighborhood levels
  * ============================================================ */
 let _reg={level:'npa',y:null,x:null};
-function regVars(){return _reg.level==='biz'?BIZ_NUM.slice():['disp'].concat(D.catalog.filter(c=>c.level==='Neighborhood'&&(c.key in NPAI)&&c.key!=='npa'&&NPA_COV[c.key]>=COV_MIN).map(c=>c.key));}
+function regVars(){return _reg.level==='biz'?BIZ_NUM.slice():['disp'].concat(D.catalog.filter(c=>c.level==='Neighborhood'&&(c.key in NPAI)&&c.key!=='npa'&&c.key!=='disp'&&NPA_COV[c.key]>=COV_MIN).map(c=>c.key));}
 function regGetVal(r,k){if(_reg.level==='npa'){if(k==='disp')return (typeof NPA_DISP!=='undefined')?NPA_DISP[npaVal(r,'npa')]:npaVal(r,'disp');return npaVal(r,k);}return bzVal(r,k);}
 function fitGeneric(rows,xkeys,ykey){
   if(!xkeys.length)return null;
@@ -2128,7 +2155,7 @@ VIEWS.present=function(){
     (links?`<div class="row" style="margin-top:8px">${links.map(l=>`<button class="btn ghost sm" onclick="go('${l[1]}')">${l[0]} →</button>`).join('')}</div>`:'')+`</div>`;
   m.innerHTML=`
   <div class="card">
-    <div class="kick">Conclude · present your findings</div>
+    <div class="kick">Conclude · prescribe · present your findings</div>
     <h2>Present your findings</h2>
     <p class="lede">A structure for your pitch to the City judges. Go in order; each section says what to show and where to find it in this tool.</p>
   </div>
@@ -2348,15 +2375,16 @@ VIEWS.survival1=function(){
   var model=sel.length?smTrain():null,trM=model?smMetrics(model,R.train):null;
   var chips=SM_CATS.map(function(cat){var items=SM_CAT.filter(d=>d.cat===cat);if(!items.length)return '';return '<div class="small mut" style="margin:10px 0 2px;font-weight:600;color:#334155">'+cat+'</div><div class="chips" style="margin:0">'+items.map(d=>'<span class="chip '+(SM.inputs[d.k]?'on':'')+'" data-si="'+d.k+'" title="'+esc(d.label)+'">'+esc(d.label)+(d.k==='displacement_score'?' ★':'')+'</span>').join('')+'</div>';}).join('');
   m.innerHTML='<div class="card">'+
-    '<div class="kick" style="color:var(--blue)">Survival model · Stage 1 of 2</div>'+
+    '<div class="kick" style="color:var(--blue)">Survival model · predict · Stage 1 of 2</div>'+
     '<h2>Stage 1 · Build the survival model</h2>'+
-    '<p class="small mut">Learn what predicts whether a business stays <b>Active</b>, using the built corridors only: <b>Blue + Silver</b> ('+R.train.length.toLocaleString()+' businesses). Pick inputs and read which ones matter. The City <b>displacement score ★</b> is just one input you can include or drop. The honest test comes in Stage 2 on the Red Line.</p>'+
+    '<p class="small mut">Learn what predicts whether a business stays <b>Active</b>, using the built corridors only: <b>Blue + Silver</b> ('+R.train.length.toLocaleString()+' businesses). Pick inputs and read which ones matter. The City <b>displacement score ★</b> is just one input you can include or drop. The honest test comes later: in <b>Stage 2</b> you apply this model to the planned Red Line, which it has never seen.</p>'+
     '<div class="small mut" style="margin:8px 0 4px">Pick inputs (the model retrains instantly):</div>'+
     chips+
     (model?(
-      '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0">'+
-        _kpi('Blue+Silver accuracy',(trM.acc*100).toFixed(1)+'%','in-sample fit')+
-        _kpi('Blue+Silver AUC',trM.auc.toFixed(3),'0.5 = coin flip')+
+      '<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:16px 0">'+
+        _kpi('Blue + Silver accuracy',(trM.acc*100).toFixed(1)+'%','how often it is right here')+
+        _kpi('Baseline',(trM.base*100).toFixed(1)+'%','guess every business survives')+
+        _kpi('AUC',trM.auc.toFixed(3),'0.5 = coin flip, 1 = perfect')+
         _kpi('Inputs used',sel.length,'of '+SM_CAT.length)+
       '</div>'+
       '<div class="small mut" style="margin-bottom:4px">How each input pushes survival (standardized weight):</div>'+
@@ -2529,7 +2557,7 @@ function VIEWS_survival3(){
   var m=document.getElementById('main');
   if(!window.RL2){m.innerHTML='<div class="card"><h2>Explore the Red Line</h2><p class="note">Business dataset not loaded. Reload from disk.</p></div>';return;}
   if(!S.shortlist)S.shortlist=[];
-  if(!smActiveSel().length){m.innerHTML='<div class="card"><div class="kick" style="color:var(--blue)">Survival model · Stage 2 of 2</div><h2>Stage 2 · Apply to the Red Line</h2><div class="warnbox" style="margin-top:10px">No model yet. Build one in <b>Stage 1</b> first.</div><div class="row" style="margin-top:12px"><button class="btn" onclick="go(\'survival1\')">← Go to Stage 1</button></div></div>';return;}
+  if(!smActiveSel().length){m.innerHTML='<div class="card"><div class="kick" style="color:var(--blue)">Survival model · predict · Stage 2 of 2</div><h2>Stage 2 · Apply to the Red Line</h2><div class="warnbox" style="margin-top:10px">No model yet. Build one in <b>Stage 1</b> first.</div><div class="row" style="margin-top:12px"><button class="btn" onclick="go(\'survival1\')">← Go to Stage 1</button></div></div>';return;}
   var e=exEnsure(),scored=e._scored,model=e._model;
   var sectors=Array.from(new Set(scored.map(function(o){return o.sector;}))).sort();
   var npas=Array.from(new Set(scored.map(function(o){return o.npa;}))).sort(function(a,b){return a-b;});
@@ -2543,7 +2571,7 @@ function VIEWS_survival3(){
   var _sliders=_akeys.map(function(k){var v=(SM.mod2&&SM.mod2[k]!=null?SM.mod2[k]:1);return '<div style="display:flex;align-items:center;gap:10px;margin:5px 0"><div style="width:210px;font-size:12px;color:#334155">'+esc(smLabel(k))+'</div><input type="range" min="0" max="2" step="0.1" value="'+v+'" data-mw="'+k+'" style="flex:1;accent-color:#1f6feb"><div style="width:42px;text-align:right;font-size:12px;font-weight:700" id="mwv_'+k+'">'+v.toFixed(1)+'×</div></div>';}).join('');
   var _adj='<details '+(_ex.adjOpen?'open':'')+' id="exAdj" style="margin:10px 0;border:1px solid #e5e9f0;border-radius:11px;padding:8px 12px"><summary style="cursor:pointer;font-weight:600;font-size:13px">Adjust factor influence — forecast '+_modPct+'% survive vs '+_refPct+'% Stage 1 reference'+(_nadj?' · '+_nadj+' changed':'')+'</summary><div class="small mut" style="margin:6px 0">Dial each Stage 1 factor up or down (1.0× = your Stage 1 model). The map, list and rankings update live.</div>'+_sliders+'<div class="row" style="margin-top:8px"><button class="btn sec sm" onclick="smResetMod2()">Reset to 1.0×</button></div></details>';
   m.innerHTML='<div class="card">'+
-    '<div class="kick" style="color:var(--blue)">Survival model · Stage 2 of 2</div>'+
+    '<div class="kick" style="color:var(--blue)">Survival model · predict · Stage 2 of 2</div>'+
     '<h2>Stage 2 · Apply to the Red Line</h2>'+
     '<p class="small mut">A working list of every planned Red Line business, each with a <b>predicted survival rate</b> from your model. Sort by predicted survival rate, filter by sector or neighborhood, click any business to see why, and <b>star the ones that matter</b> to build a shortlist you can export.</p>'+
     _adj+
